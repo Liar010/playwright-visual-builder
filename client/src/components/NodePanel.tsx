@@ -20,7 +20,12 @@ import {
   ApiOutlined,
   FileTextOutlined,
   TagOutlined,
-  SettingOutlined
+  SettingOutlined,
+  DownloadOutlined,
+  FileAddOutlined,
+  SwitcherOutlined,
+  DatabaseOutlined,
+  CodeOutlined
 } from '@ant-design/icons';
 import type { NodeType } from '@playwright-visual-builder/shared';
 
@@ -91,6 +96,13 @@ const nodeTemplates = [
     defaultData: { label: 'Hover', action: { selector: '' } },
     category: 'mouse',
   },
+  {
+    type: 'dragAndDrop' as NodeType,
+    label: 'ドラッグ&ドロップ',
+    icon: <DragOutlined />,
+    defaultData: { label: 'Drag & Drop', action: { sourceSelector: '', targetSelector: '' } },
+    category: 'mouse',
+  },
   // Input Actions
   {
     type: 'fill' as NodeType,
@@ -150,6 +162,27 @@ const nodeTemplates = [
   },
   // Wait Actions
   {
+    type: 'waitForResponse' as NodeType,
+    label: 'レスポンス待機',
+    icon: <ApiOutlined />,
+    defaultData: { label: 'Wait for Response', action: { urlPattern: '', statusCode: 200 } },
+    category: 'wait',
+  },
+  {
+    type: 'waitForRequest' as NodeType,
+    label: 'リクエスト待機',
+    icon: <ApiOutlined />,
+    defaultData: { label: 'Wait for Request', action: { urlPattern: '', method: 'GET' } },
+    category: 'wait',
+  },
+  {
+    type: 'waitForFunction' as NodeType,
+    label: '関数待機',
+    icon: <ClockCircleOutlined />,
+    defaultData: { label: 'Wait for Function', action: { expression: 'true' } },
+    category: 'wait',
+  },
+  {
     type: 'wait' as NodeType,
     label: '待機',
     icon: <ClockCircleOutlined />,
@@ -179,6 +212,13 @@ const nodeTemplates = [
   },
   // Assertions
   {
+    type: 'getCount' as NodeType,
+    label: '要素数取得',
+    icon: <TagOutlined />,
+    defaultData: { label: 'Get Count', action: { selector: '' } },
+    category: 'assertion',
+  },
+  {
     type: 'assertion' as NodeType,
     label: 'アサーション',
     icon: <CheckCircleOutlined />,
@@ -192,14 +232,14 @@ const nodeTemplates = [
     type: 'getText' as NodeType,
     label: 'テキスト取得',
     icon: <FileTextOutlined />,
-    defaultData: { label: 'Get Text', action: { selector: '', variableName: '' } },
+    defaultData: { label: 'Get Text', action: { selector: '' } },
     category: 'assertion',
   },
   {
     type: 'getAttribute' as NodeType,
     label: '属性取得',
     icon: <TagOutlined />,
-    defaultData: { label: 'Get Attribute', action: { selector: '', attribute: '', variableName: '' } },
+    defaultData: { label: 'Get Attribute', action: { selector: '', attribute: '' } },
     category: 'assertion',
   },
   {
@@ -239,12 +279,92 @@ const nodeTemplates = [
     category: 'advanced',
   },
   {
+    type: 'iframe' as NodeType,
+    label: 'iframe操作',
+    icon: <FileTextOutlined />,
+    defaultData: { label: 'iFrame', action: { selector: 'iframe', iframeAction: 'switch' } },
+    category: 'advanced',
+  },
+  {
+    type: 'dialog' as NodeType,
+    label: 'ダイアログ処理',
+    icon: <ApiOutlined />,
+    defaultData: { label: 'Dialog', action: { dialogAction: 'accept' } },
+    category: 'advanced',
+  },
+  {
+    type: 'download' as NodeType,
+    label: 'ダウンロード',
+    icon: <DownloadOutlined />,
+    defaultData: { label: 'Download', action: { triggerSelector: '' } },
+    category: 'advanced',
+  },
+  {
+    type: 'newPage' as NodeType,
+    label: '新規ページ',
+    icon: <FileAddOutlined />,
+    defaultData: { label: 'New Page', action: { url: '' } },
+    category: 'advanced',
+  },
+  {
+    type: 'switchTab' as NodeType,
+    label: 'タブ切替',
+    icon: <SwitcherOutlined />,
+    defaultData: { label: 'Switch Tab', action: { index: 0 } },
+    category: 'advanced',
+  },
+  {
+    type: 'setCookie' as NodeType,
+    label: 'Cookie設定',
+    icon: <SettingOutlined />,
+    defaultData: { label: 'Set Cookie', action: { name: '', value: '' } },
+    category: 'advanced',
+  },
+  {
+    type: 'localStorage' as NodeType,
+    label: 'LocalStorage',
+    icon: <DatabaseOutlined />,
+    defaultData: { label: 'LocalStorage', action: { storageAction: 'set', key: '', value: '' } },
+    category: 'advanced',
+  },
+  {
+    type: 'networkIntercept' as NodeType,
+    label: 'ネットワーク制御',
+    icon: <ApiOutlined />,
+    defaultData: { label: 'Network Intercept', action: { interceptAction: 'mock', urlPattern: '' } },
+    category: 'advanced',
+  },
+  {
     type: 'condition' as NodeType,
     label: '条件分岐',
     icon: <BranchesOutlined />,
     defaultData: {
       label: 'If/Else',
       condition: { expression: '' },
+    },
+    category: 'advanced',
+  },
+  {
+    type: 'loop' as NodeType,
+    label: 'ループ',
+    icon: <ReloadOutlined />,
+    defaultData: {
+      label: 'Loop',
+      loop: { type: 'count', count: 3 },
+    },
+    category: 'advanced',
+  },
+  {
+    type: 'customCode' as NodeType,
+    label: 'カスタムコード',
+    icon: <CodeOutlined />,
+    defaultData: {
+      label: 'Custom Code',
+      customCode: { 
+        code: '// カスタムコードを入力', 
+        description: '',
+        wrapInTryCatch: false 
+      },
     },
     category: 'advanced',
   },
@@ -286,19 +406,56 @@ export default function NodePanel({ setNodes, reactFlowInstance }: NodePanelProp
         }
       }
       
+      const timestamp = Date.now();
       const newNode: Node = {
-        id: `node-${Date.now()}`,
+        id: `node-${timestamp}`,
         type: template.type,
         position,
         data: { ...template.defaultData },
         zIndex: 1000,
       };
       
-      setNodes((nds) => {
-        // 既存ノードのzIndexを下げる
-        const updatedNodes = nds.map(node => ({ ...node, zIndex: node.zIndex ? node.zIndex - 1 : 0 }));
-        return [...updatedNodes, newNode];
-      });
+      // 条件分岐の場合、自動的にEndノードも追加
+      if (template.type === 'condition') {
+        const endNode: Node = {
+          id: `node-${timestamp}-end`,
+          type: 'conditionEnd' as NodeType,
+          position: { x: position.x, y: position.y + 200 },
+          data: { label: 'End If', pairId: newNode.id },
+          zIndex: 999,
+        };
+        
+        setNodes((nds) => {
+          const updatedNodes = nds.map(node => ({ ...node, zIndex: node.zIndex ? node.zIndex - 1 : 0 }));
+          // データに相互参照を追加
+          newNode.data.pairId = endNode.id;
+          return [...updatedNodes, newNode, endNode];
+        });
+      }
+      // ループの場合、自動的にEndノードも追加
+      else if (template.type === 'loop') {
+        const endNode: Node = {
+          id: `node-${timestamp}-end`,
+          type: 'loopEnd' as NodeType,
+          position: { x: position.x, y: position.y + 200 },
+          data: { label: 'End Loop', pairId: newNode.id },
+          zIndex: 999,
+        };
+        
+        setNodes((nds) => {
+          const updatedNodes = nds.map(node => ({ ...node, zIndex: node.zIndex ? node.zIndex - 1 : 0 }));
+          // データに相互参照を追加
+          newNode.data.pairId = endNode.id;
+          return [...updatedNodes, newNode, endNode];
+        });
+      }
+      // その他のノード
+      else {
+        setNodes((nds) => {
+          const updatedNodes = nds.map(node => ({ ...node, zIndex: node.zIndex ? node.zIndex - 1 : 0 }));
+          return [...updatedNodes, newNode];
+        });
+      }
     },
     [setNodes, reactFlowInstance]
   );

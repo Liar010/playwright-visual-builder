@@ -35,42 +35,8 @@ export default memo(({ data, selected }: NodeProps) => {
       <Handle
         type="source"
         position={Position.Bottom}
-        id="loop"
-        style={{ 
-          left: '30%', 
-          background: '#fa8c16',
-        }}
+        style={{ background: '#fa8c16' }}
       />
-      <div style={{
-        position: 'absolute',
-        bottom: '-20px',
-        left: '30%',
-        transform: 'translateX(-50%)',
-        fontSize: '10px',
-        color: '#fa8c16',
-      }}>
-        ループ内
-      </div>
-      
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="next"
-        style={{ 
-          left: '70%', 
-          background: '#1890ff',
-        }}
-      />
-      <div style={{
-        position: 'absolute',
-        bottom: '-20px',
-        left: '70%',
-        transform: 'translateX(-50%)',
-        fontSize: '10px',
-        color: '#1890ff',
-      }}>
-        次へ
-      </div>
     </div>
   );
 });

@@ -3,6 +3,8 @@ import { Handle, Position, NodeProps } from 'reactflow';
 import type { NodeType } from '@playwright-visual-builder/shared';
 import ConditionNode from './ConditionNode';
 import LoopNode from './LoopNode';
+import EndNode from './EndNode';
+import CustomCodeNode from './CustomCodeNode';
 
 interface CustomNodeData {
   label: string;
@@ -97,5 +99,11 @@ export const nodeTypes = {
   dialog: CustomNode,
   download: CustomNode,
   condition: ConditionNode,
+  conditionEnd: EndNode,
   loop: LoopNode,
+  loopEnd: EndNode,
+  // Network
+  networkIntercept: CustomNode,
+  // Custom
+  customCode: CustomCodeNode,
 };

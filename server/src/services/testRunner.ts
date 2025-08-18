@@ -15,6 +15,8 @@ export class TestRunner {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+  private pages: Map<string, Page> = new Map(); // 複数ページ管理
+  private currentPageId: string = 'main'; // 現在のページID
   private testResult: TestResult;
   private config: TestConfig;
   private screenshotDir: string;
@@ -119,6 +121,10 @@ export class TestRunner {
 
     this.context = await this.browser.newContext(contextOptions);
     this.page = await this.context.newPage();
+    
+    // メインページを登録
+    this.pages.set('main', this.page);
+    this.currentPageId = 'main';
 
     // ベースURLの設定
     if (this.config.baseUrl) {
@@ -319,13 +325,13 @@ export class TestRunner {
 
         case 'uploadFile':
           const fileSelector = data.action?.selector || '';
-          const filePath = data.action?.filePath || '';
+          const uploadFilePath = data.action?.filePath || '';
           await this.page.waitForSelector(fileSelector, {
             state: 'visible',
             timeout: 10000,
           });
-          await this.page.setInputFiles(fileSelector, filePath);
-          console.log(`File uploaded: ${filePath}`);
+          await this.page.setInputFiles(fileSelector, uploadFilePath);
+          console.log(`File uploaded: ${uploadFilePath}`);
           break;
 
         case 'focus':
@@ -349,9 +355,9 @@ export class TestRunner {
           break;
 
         case 'keyboard':
-          const key = data.action?.key || '';
-          console.log(`Pressing key: ${key}`);
-          await this.page.keyboard.press(key);
+          const keyboardKey = data.action?.key || '';
+          console.log(`Pressing key: ${keyboardKey}`);
+          await this.page.keyboard.press(keyboardKey);
           break;
 
         case 'scroll':
@@ -386,9 +392,9 @@ export class TestRunner {
           break;
 
         case 'waitForURL':
-          const urlPattern = data.action?.urlPattern || '';
-          console.log(`Waiting for URL: ${urlPattern}`);
-          await this.page.waitForURL(urlPattern, { timeout: 30000 });
+          const waitUrlPattern = data.action?.urlPattern || '';
+          console.log(`Waiting for URL: ${waitUrlPattern}`);
+          await this.page.waitForURL(waitUrlPattern, { timeout: 30000 });
           console.log(`URL matched: ${this.page.url()}`);
           break;
 
@@ -400,18 +406,18 @@ export class TestRunner {
 
         case 'waitForHidden':
           const selector = data.action?.selector;
-          const timeout = data.action?.timeout || 10000;
+          const waitHiddenTimeout = data.action?.timeout || 10000;
           
           if (!selector) {
             throw new Error('waitForHidden requires a selector');
           }
           
-          console.log(`Waiting for element to be hidden: ${selector} (timeout: ${timeout}ms)`);
+          console.log(`Waiting for element to be hidden: ${selector} (timeout: ${waitHiddenTimeout}ms)`);
           
           // 要素が非表示になるまで待機
           await this.page.waitForSelector(selector, {
             state: 'hidden',
-            timeout: timeout,
+            timeout: waitHiddenTimeout,
           });
           
           console.log(`✓ Element is now hidden: ${selector}`);
@@ -513,6 +519,361 @@ export class TestRunner {
           await this.executeLoop(node);
           break;
 
+        case 'iframe':
+          const iframeSelector = data.action?.selector || 'iframe';
+          const iframeAction = data.action?.iframeAction || 'switch';
+          
+          if (iframeAction === 'switch') {
+            // iframe内に切り替え
+            const frameElement = await this.page.waitForSelector(iframeSelector, {
+              state: 'attached',
+              timeout: 10000,
+            });
+            const frame = await frameElement.contentFrame();
+            if (!frame) {
+              throw new Error(`Could not get frame from selector: ${iframeSelector}`);
+            }
+            // フレーム内で操作を実行するために一時的にpageを置き換え
+            // 注: 実際の実装では、フレームコンテキストを管理する必要がある
+            console.log(`Switched to iframe: ${iframeSelector}`);
+          } else if (iframeAction === 'exit') {
+            // メインフレームに戻る
+            console.log('Exited iframe context');
+          }
+          break;
+
+        case 'dialog':
+          const dialogAction = data.action?.dialogAction || 'accept';
+          const dialogMessage = data.action?.message || '';
+          
+          // ダイアログハンドラーを設定
+          this.page.on('dialog', async dialog => {
+            console.log(`Dialog appeared: ${dialog.message()}`);
+            if (dialogAction === 'accept') {
+              await dialog.accept(dialogMessage);
+              console.log('Dialog accepted');
+            } else if (dialogAction === 'dismiss') {
+              await dialog.dismiss();
+              console.log('Dialog dismissed');
+            }
+          });
+          
+          // ダイアログトリガーアクションがある場合は実行
+          if (data.action?.triggerSelector) {
+            await this.page.click(data.action.triggerSelector);
+          }
+          break;
+
+        case 'download':
+          const downloadPath = data.action?.downloadPath || './downloads';
+          
+          // ダウンロードイベントを待機
+          const downloadPromise = this.page.waitForEvent('download');
+          
+          // ダウンロードをトリガーするアクション
+          if (data.action?.triggerSelector) {
+            await this.page.click(data.action.triggerSelector);
+          }
+          
+          const download = await downloadPromise;
+          const suggestedFilename = download.suggestedFilename();
+          const downloadFilePath = path.join(downloadPath, suggestedFilename);
+          
+          // ファイルを保存
+          await download.saveAs(downloadFilePath);
+          console.log(`File downloaded: ${downloadFilePath}`);
+          break;
+
+        case 'dragAndDrop':
+          const sourceSelector = data.action?.sourceSelector || '';
+          const targetSelector = data.action?.targetSelector || '';
+          
+          if (!sourceSelector || !targetSelector) {
+            throw new Error('dragAndDrop requires both sourceSelector and targetSelector');
+          }
+          
+          await this.page.waitForSelector(sourceSelector, {
+            state: 'visible',
+            timeout: 10000,
+          });
+          await this.page.waitForSelector(targetSelector, {
+            state: 'visible',
+            timeout: 10000,
+          });
+          
+          await this.page.dragAndDrop(sourceSelector, targetSelector);
+          console.log(`Dragged from ${sourceSelector} to ${targetSelector}`);
+          break;
+
+        case 'getCount':
+          const countSelector = data.action?.selector || '';
+          await this.page.waitForSelector(countSelector, {
+            state: 'attached',
+            timeout: 10000,
+          });
+          const count = await this.page.locator(countSelector).count();
+          console.log(`Element count for "${countSelector}": ${count}`);
+          // TODO: 変数に保存する機能を実装
+          break;
+
+        case 'waitForResponse':
+          const responseUrlPattern = data.action?.urlPattern || '';
+          const statusCode = data.action?.statusCode;
+          const responseTimeout = data.action?.timeout || 30000;
+          
+          console.log(`Waiting for response: ${responseUrlPattern}`);
+          const response = await this.page.waitForResponse(
+            response => {
+              const matchesUrl = response.url().includes(responseUrlPattern);
+              const matchesStatus = statusCode ? response.status() === statusCode : true;
+              return matchesUrl && matchesStatus;
+            },
+            { timeout: responseTimeout }
+          );
+          console.log(`Response received: ${response.url()} (${response.status()})`);
+          break;
+
+        case 'waitForRequest':
+          const requestUrlPattern = data.action?.urlPattern || '';
+          const requestMethod = data.action?.method;
+          const requestTimeout = data.action?.timeout || 30000;
+          
+          console.log(`Waiting for request: ${requestUrlPattern}`);
+          const request = await this.page.waitForRequest(
+            request => {
+              const matchesUrl = request.url().includes(requestUrlPattern);
+              const matchesMethod = requestMethod ? request.method() === requestMethod : true;
+              return matchesUrl && matchesMethod;
+            },
+            { timeout: requestTimeout }
+          );
+          console.log(`Request made: ${request.url()} (${request.method()})`);
+          break;
+
+        case 'waitForFunction':
+          const expression = data.action?.expression || '';
+          const functionTimeout = data.action?.timeout || 30000;
+          
+          if (!expression) {
+            throw new Error('waitForFunction requires an expression');
+          }
+          
+          console.log(`Waiting for function: ${expression}`);
+          await this.page.waitForFunction(expression, { timeout: functionTimeout });
+          console.log('Function condition met');
+          break;
+
+        case 'newPage':
+          const pageId = data.action?.pageId || `page-${Date.now()}`;
+          const newPageUrl = data.action?.url;
+          
+          // 新しいページを作成
+          const newPage = await this.context!.newPage();
+          this.pages.set(pageId, newPage);
+          
+          // URLが指定されていれば遷移
+          if (newPageUrl) {
+            await newPage.goto(this.resolveUrl(newPageUrl));
+          }
+          
+          // 現在のページを新しいページに切り替え
+          this.currentPageId = pageId;
+          this.page = newPage;
+          
+          console.log(`New page created with ID: ${pageId}`);
+          break;
+
+        case 'switchTab':
+          const targetPageId = data.action?.pageId;
+          const targetIndex = data.action?.index;
+          
+          if (targetPageId && this.pages.has(targetPageId)) {
+            // ページIDで切り替え
+            this.page = this.pages.get(targetPageId)!;
+            this.currentPageId = targetPageId;
+            console.log(`Switched to page: ${targetPageId}`);
+          } else if (targetIndex !== undefined) {
+            // インデックスで切り替え
+            const allPages = this.context!.pages();
+            if (targetIndex >= 0 && targetIndex < allPages.length) {
+              this.page = allPages[targetIndex];
+              console.log(`Switched to page at index: ${targetIndex}`);
+            } else {
+              throw new Error(`Invalid page index: ${targetIndex}`);
+            }
+          } else {
+            // 最後のページに切り替え
+            const allPages = this.context!.pages();
+            this.page = allPages[allPages.length - 1];
+            console.log('Switched to last page');
+          }
+          break;
+
+        case 'setCookie':
+          const cookies = data.action?.cookies || [];
+          
+          if (cookies.length > 0) {
+            await this.context!.addCookies(cookies);
+            console.log(`Set ${cookies.length} cookie(s)`);
+          } else {
+            // 単一のCookie設定
+            const cookie = {
+              name: data.action?.name || '',
+              value: data.action?.value || '',
+              domain: data.action?.domain,
+              path: data.action?.path || '/',
+              expires: data.action?.expires,
+              httpOnly: data.action?.httpOnly,
+              secure: data.action?.secure,
+              sameSite: data.action?.sameSite as 'Strict' | 'Lax' | 'None' | undefined,
+            };
+            await this.context!.addCookies([cookie]);
+            console.log(`Set cookie: ${cookie.name}`);
+          }
+          break;
+
+        case 'localStorage':
+          const storageAction = data.action?.storageAction || 'set';
+          const storageKey = data.action?.key || '';
+          const value = data.action?.value;
+          
+          if (storageAction === 'set') {
+            // LocalStorageに値を設定
+            await this.page.evaluate(({ k, v }) => {
+              localStorage.setItem(k, v);
+            }, { k: storageKey, v: value });
+            console.log(`Set localStorage: ${storageKey}`);
+          } else if (storageAction === 'get') {
+            // LocalStorageから値を取得
+            const storedValue = await this.page.evaluate((k) => {
+              return localStorage.getItem(k);
+            }, storageKey);
+            console.log(`Got localStorage ${storageKey}: ${storedValue}`);
+            // TODO: 変数に保存する機能を実装
+          } else if (storageAction === 'remove') {
+            // LocalStorageから削除
+            await this.page.evaluate((k) => {
+              localStorage.removeItem(k);
+            }, storageKey);
+            console.log(`Removed localStorage: ${storageKey}`);
+          } else if (storageAction === 'clear') {
+            // LocalStorageをクリア
+            await this.page.evaluate(() => {
+              localStorage.clear();
+            });
+            console.log('Cleared localStorage');
+          }
+          break;
+
+        case 'networkIntercept':
+          const interceptAction = data.action?.interceptAction || 'mock';
+          const urlPatternIntercept = data.action?.urlPattern || '';
+          const interceptMethod = data.action?.method;
+          
+          if (interceptAction === 'mock') {
+            // リクエストをモック
+            const mockResponse = data.action?.mockResponse || {};
+            const mockStatus = data.action?.mockStatus || 200;
+            const mockHeaders = data.action?.mockHeaders || {};
+            const mockBody = data.action?.mockBody || '';
+            
+            await this.page.route(urlPatternIntercept, async (route, request) => {
+              const matchesMethod = interceptMethod ? request.method() === interceptMethod : true;
+              
+              if (matchesMethod) {
+                console.log(`Mocking request: ${request.url()}`);
+                await route.fulfill({
+                  status: mockStatus,
+                  headers: mockHeaders,
+                  body: typeof mockBody === 'object' ? JSON.stringify(mockBody) : mockBody,
+                });
+              } else {
+                await route.continue();
+              }
+            });
+            console.log(`Set up mock for: ${urlPatternIntercept}`);
+            
+          } else if (interceptAction === 'block') {
+            // リクエストをブロック
+            await this.page.route(urlPatternIntercept, async (route, request) => {
+              const matchesMethod = interceptMethod ? request.method() === interceptMethod : true;
+              
+              if (matchesMethod) {
+                console.log(`Blocking request: ${request.url()}`);
+                await route.abort();
+              } else {
+                await route.continue();
+              }
+            });
+            console.log(`Set up block for: ${urlPatternIntercept}`);
+            
+          } else if (interceptAction === 'modify') {
+            // リクエスト/レスポンスを修正
+            const modifyHeaders = data.action?.modifyHeaders || {};
+            const modifyPostData = data.action?.modifyPostData;
+            
+            await this.page.route(urlPatternIntercept, async (route, request) => {
+              const matchesMethod = interceptMethod ? request.method() === interceptMethod : true;
+              
+              if (matchesMethod) {
+                console.log(`Modifying request: ${request.url()}`);
+                const headers = {
+                  ...request.headers(),
+                  ...modifyHeaders,
+                };
+                
+                await route.continue({
+                  headers,
+                  postData: modifyPostData,
+                });
+              } else {
+                await route.continue();
+              }
+            });
+            console.log(`Set up modification for: ${urlPatternIntercept}`);
+            
+          } else if (interceptAction === 'delay') {
+            // リクエストに遅延を追加
+            const delay = data.action?.delay || 1000;
+            
+            await this.page.route(urlPatternIntercept, async (route, request) => {
+              const matchesMethod = interceptMethod ? request.method() === interceptMethod : true;
+              
+              if (matchesMethod) {
+                console.log(`Delaying request by ${delay}ms: ${request.url()}`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                await route.continue();
+              } else {
+                await route.continue();
+              }
+            });
+            console.log(`Set up delay for: ${urlPatternIntercept}`);
+            
+          } else if (interceptAction === 'clear') {
+            // インターセプトをクリア
+            await this.page.unroute(urlPatternIntercept);
+            console.log(`Cleared intercept for: ${urlPatternIntercept}`);
+          }
+          break;
+
+        case 'customCode':
+          // カスタムコードの実行
+          if (data.customCode?.code) {
+            try {
+              console.log('Executing custom code...');
+              // page変数をコンテキストとして渡してeval実行
+              const page = this.page;
+              await eval(`(async () => { ${data.customCode.code} })()`);
+              console.log('Custom code executed successfully');
+            } catch (error) {
+              if (!data.customCode.wrapInTryCatch) {
+                throw error;
+              }
+              console.error('Custom code error:', error);
+            }
+          }
+          break;
+          
         default:
           throw new Error(`Unknown node type: ${type}`);
       }

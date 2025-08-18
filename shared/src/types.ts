@@ -48,7 +48,13 @@ export type NodeType =
   | 'dialog'
   | 'download'
   | 'condition'
-  | 'loop';
+  | 'conditionEnd'
+  | 'loop'
+  | 'loopEnd'
+  // Network
+  | 'networkIntercept'
+  // Custom
+  | 'customCode';
 
 export interface TestNode {
   id: string;
@@ -63,7 +69,15 @@ export interface NodeData {
   assertion?: AssertionData;
   condition?: ConditionData;
   loop?: LoopData;
+  customCode?: CustomCodeData;
   [key: string]: any;
+}
+
+export interface CustomCodeData {
+  code: string;
+  description?: string;
+  // エラーハンドリングの有無
+  wrapInTryCatch?: boolean;
 }
 
 export interface ActionData {
