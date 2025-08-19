@@ -138,7 +138,11 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           };
           break;
         case 'dialog':
-          updatedData.action = { dialogAction: values.dialogAction };
+          updatedData.action = { 
+            dialogAction: values.dialogAction,
+            triggerSelector: values.triggerSelector,
+            message: values.message
+          };
           break;
         case 'download':
           updatedData.action = { triggerSelector: values.triggerSelector };
@@ -634,6 +638,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
                 <Select.Option value="accept">承認（OK）</Select.Option>
                 <Select.Option value="dismiss">キャンセル</Select.Option>
               </Select>
+            </Form.Item>
+            <Form.Item name="triggerSelector" label="トリガーセレクタ（オプション）">
+              <Input placeholder="ダイアログを出すボタンのセレクタ（例：button#alert）" />
+            </Form.Item>
+            <Form.Item name="message" label="入力値（promptの場合）">
+              <Input placeholder="promptダイアログに入力する値" />
             </Form.Item>
           </>
         );

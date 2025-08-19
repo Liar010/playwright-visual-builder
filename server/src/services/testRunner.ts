@@ -16,6 +16,7 @@ export class TestRunner {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private pages: Map<string, Page> = new Map(); // 複数ページ管理
+  private screenshots: Array<{ id: string; data: string; timestamp: number; nodeId: string; label?: string }> = [];
   private currentPageId: string = 'main'; // 現在のページID
   private testResult: TestResult;
   private config: TestConfig;
@@ -24,6 +25,7 @@ export class TestRunner {
   private screenshotInterval: NodeJS.Timeout | null = null;
   private retryCount: number = 3; // デフォルトのリトライ回数
   private retryDelay: number = 1000; // リトライ間の待機時間（ミリ秒）
+  private variables: Map<string, any> = new Map(); // 変数ストレージ
 
   constructor(socket: Socket, config?: TestConfig) {
     this.socket = socket;
@@ -41,24 +43,80 @@ export class TestRunner {
   async run(nodes: Node[], edges: Edge[]) {
     try {
       await this.setup();
-      const sortedNodes = this.sortNodesByFlow(nodes, edges);
+      
+      // ノードマップとエッジマップを作成
+      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+      const edgesBySource = new Map<string, Edge[]>();
+      edges.forEach(edge => {
+        if (!edgesBySource.has(edge.source)) {
+          edgesBySource.set(edge.source, []);
+        }
+        edgesBySource.get(edge.source)!.push(edge);
+      });
 
-      this.testResult.steps = sortedNodes.map((node) => ({
+      this.testResult.steps = nodes.map((node) => ({
         nodeId: node.id,
         status: 'pending',
       }));
 
       this.emitUpdate();
 
-      for (let i = 0; i < sortedNodes.length; i++) {
-        const node = sortedNodes[i];
-        await this.executeNode(node);
+      // 開始ノードを見つける
+      const startNodes = nodes.filter(
+        (n) => !edges.some((e) => e.target === n.id)
+      );
+
+      // ノードを実行済みとして記録
+      const executedNodes = new Set<string>();
+      
+      // ノードを再帰的に実行
+      const executeNodeRecursive = async (nodeId: string): Promise<void> => {
+        if (executedNodes.has(nodeId)) return;
+        executedNodes.add(nodeId);
         
-        // ノード間の自動遅延（最後のノードの後は不要）
-        if (this.config.nodeDelay && i < sortedNodes.length - 1) {
-          console.log(`Applying node delay: ${this.config.nodeDelay}ms`);
-          await new Promise(resolve => setTimeout(resolve, this.config.nodeDelay));
+        const node = nodeMap.get(nodeId);
+        if (!node) return;
+        
+        // 条件分岐ノードの特別処理
+        if (node.type === 'condition') {
+          const conditionResult = await this.evaluateCondition(node);
+          console.log(`Condition evaluated: ${conditionResult ? 'TRUE' : 'FALSE'}`);
+          
+          // 条件に基づいて適切なパスのエッジを取得
+          const outgoingEdges = edgesBySource.get(nodeId) || [];
+          for (const edge of outgoingEdges) {
+            // sourceHandleでTRUE/FALSEパスを判定
+            const isTruePath = edge.sourceHandle === 'true';
+            const isFalsePath = edge.sourceHandle === 'false';
+            
+            if ((conditionResult && isTruePath) || (!conditionResult && isFalsePath)) {
+              // 条件に合致するパスのノードを実行
+              await executeNodeRecursive(edge.target);
+            } else if (!isTruePath && !isFalsePath) {
+              // ハンドルが指定されていない場合は両方のパスを実行（後方互換性）
+              await executeNodeRecursive(edge.target);
+            }
+          }
+        } else {
+          // 通常のノードを実行
+          await this.executeNode(node);
+          
+          // ノード間の自動遅延
+          if (this.config.nodeDelay) {
+            await new Promise(resolve => setTimeout(resolve, this.config.nodeDelay));
+          }
+          
+          // 次のノードへ進む
+          const outgoingEdges = edgesBySource.get(nodeId) || [];
+          for (const edge of outgoingEdges) {
+            await executeNodeRecursive(edge.target);
+          }
         }
+      };
+      
+      // 各開始ノードから実行を開始
+      for (const startNode of startNodes) {
+        await executeNodeRecursive(startNode.id);
       }
 
       this.testResult.status = 'passed';
@@ -96,6 +154,7 @@ export class TestRunner {
     
     this.browser = await chromium.launch({
       headless: isHeadless,
+      downloadsPath: path.join(process.cwd(), '../downloads'),
       args: [
         '--ignore-certificate-errors',
         '--disable-web-security',
@@ -109,6 +168,7 @@ export class TestRunner {
     const contextOptions: any = {
       ignoreHTTPSErrors: true,
       viewport: this.config.viewport || { width: 1280, height: 720 },
+      acceptDownloads: true,  // ダウンロードを自動的に許可
     };
 
     // Basic認証の設定
@@ -226,22 +286,22 @@ export class TestRunner {
     if (!this.page) throw new Error('Page not initialized');
 
     const { type, data } = node;
-    console.log(`Executing ${type}: ${data.label}`);
+    this.emitLog('info', `Executing ${type}: ${data.label}`);
 
     try {
       switch (type as NodeType) {
         case 'navigate':
           const inputUrl = data.action?.url || '';
-          console.log(`Navigate input URL: "${inputUrl}"`);
+          this.emitLog('debug', `Navigate input URL: "${inputUrl}"`);
           const url = this.resolveUrl(inputUrl);
-          console.log(`Navigating to: ${url}`);
+          this.emitLog('info', `Navigating to: ${url}`);
           await this.retryOnNetworkError(async () => {
             await this.page!.goto(url, {
               waitUntil: 'networkidle',
               timeout: 30000,
             });
           }, `Navigate to ${url}`);
-          console.log(`Navigation completed: ${url}`);
+          this.emitLog('info', `Navigation completed: ${url}`);
           break;
 
         case 'goBack':
@@ -427,14 +487,40 @@ export class TestRunner {
           await this.handleAssertion(data);
           break;
 
-        case 'screenshot':
+        case 'screenshot': {
+          const timestamp = Date.now();
+          const nodeId = node.id || 'unknown';  // node.idを使用（dataではなく）
+          const screenshotId = `screenshot-${nodeId.replace(/[^a-zA-Z0-9]/g, '-')}-${timestamp}`;
           const screenshotPath = path.join(
             this.screenshotDir,
-            `screenshot-${Date.now()}.png`
+            `${screenshotId}.png`
           );
-          await this.page.screenshot({ path: screenshotPath, fullPage: true });
+          
+          // スクリーンショットを取得
+          const screenshotBuffer = await this.page.screenshot({ 
+            path: screenshotPath, 
+            fullPage: true 
+          });
+          
+          // Base64エンコード
+          const base64Image = screenshotBuffer.toString('base64');
+          
+          // スクリーンショットデータを保存
+          const screenshotData = {
+            id: screenshotId,
+            data: `data:image/png;base64,${base64Image}`,
+            timestamp: timestamp,
+            nodeId: nodeId,
+            label: data.label || 'Screenshot'
+          };
+          
+          this.screenshots.push(screenshotData);
+          
+          // クライアントにスクリーンショットを送信
+          this.socket.emit('screenshot', screenshotData);
           console.log(`Screenshot saved: ${screenshotPath}`);
           break;
+        }
 
         case 'getText':
           const textSelector = data.action?.selector || '';
@@ -444,7 +530,10 @@ export class TestRunner {
           });
           const textContent = await this.page.locator(textSelector).textContent();
           console.log(`Text content: ${textContent}`);
-          // TODO: 変数に保存する機能を実装
+          // 変数名が指定されていれば保存、なければnode.idをキーとして保存
+          const varName = data.action?.variableName || data.action?.variable || `text_${node.id}`;
+          this.variables.set(varName, textContent);
+          console.log(`Stored text in variable: ${varName} = "${textContent}"`);
           break;
 
         case 'getAttribute':
@@ -456,7 +545,10 @@ export class TestRunner {
           });
           const attrValue = await this.page.locator(attrSelector).getAttribute(attrName);
           console.log(`Attribute ${attrName}: ${attrValue}`);
-          // TODO: 変数に保存する機能を実装
+          // 変数名が指定されていれば保存、なければnode.idをキーとして保存
+          const attrVarName = data.action?.variableName || data.action?.variable || `attr_${node.id}`;
+          this.variables.set(attrVarName, attrValue);
+          console.log(`Stored attribute in variable: ${attrVarName} = "${attrValue}"`);
           break;
 
         case 'isEnabled':
@@ -515,8 +607,18 @@ export class TestRunner {
           await this.executeCondition(node);
           break;
 
+        case 'conditionEnd':
+          // conditionEndは制御フロー管理のマーカーノードなので何もしない
+          console.log('Condition block ended');
+          break;
+
         case 'loop':
           await this.executeLoop(node);
+          break;
+
+        case 'loopEnd':
+          // loopEndは制御フロー管理のマーカーノードなので何もしない
+          console.log('Loop block ended');
           break;
 
         case 'iframe':
@@ -545,22 +647,58 @@ export class TestRunner {
         case 'dialog':
           const dialogAction = data.action?.dialogAction || 'accept';
           const dialogMessage = data.action?.message || '';
+          const waitForDialog = data.action?.waitForDialog !== false; // デフォルトはtrue
           
-          // ダイアログハンドラーを設定
-          this.page.on('dialog', async dialog => {
-            console.log(`Dialog appeared: ${dialog.message()}`);
-            if (dialogAction === 'accept') {
-              await dialog.accept(dialogMessage);
-              console.log('Dialog accepted');
-            } else if (dialogAction === 'dismiss') {
-              await dialog.dismiss();
-              console.log('Dialog dismissed');
-            }
+          // ダイアログの処理を準備
+          const dialogPromise = new Promise<void>((resolve) => {
+            const handler = async (dialog: any) => {
+              console.log(`Dialog appeared: ${dialog.type()} - "${dialog.message()}"`);
+              
+              try {
+                if (dialogAction === 'accept') {
+                  if (dialog.type() === 'prompt') {
+                    await dialog.accept(dialogMessage || '');
+                    console.log(`Dialog accepted with: "${dialogMessage}"`);
+                  } else {
+                    await dialog.accept();
+                    console.log('Dialog accepted');
+                  }
+                } else if (dialogAction === 'dismiss') {
+                  await dialog.dismiss();
+                  console.log('Dialog dismissed');
+                }
+              } catch (error) {
+                console.error('Error handling dialog:', error);
+              }
+              
+              // ハンドラーを削除
+              this.page.off('dialog', handler);
+              resolve();
+            };
+            
+            this.page.on('dialog', handler);
           });
           
           // ダイアログトリガーアクションがある場合は実行
           if (data.action?.triggerSelector) {
+            console.log(`Clicking trigger: ${data.action.triggerSelector}`);
             await this.page.click(data.action.triggerSelector);
+            
+            // ダイアログが表示されるのを待つ
+            if (waitForDialog) {
+              try {
+                await Promise.race([
+                  dialogPromise,
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Dialog timeout')), 5000)
+                  )
+                ]);
+              } catch (error) {
+                console.warn('Dialog did not appear within 5 seconds');
+              }
+            }
+          } else {
+            console.log('Dialog handler set, waiting for dialog to appear...');
           }
           break;
 
@@ -1107,7 +1245,7 @@ export class TestRunner {
     throw lastError || new Error(`${operation} failed after ${this.retryCount} attempts`);
   }
 
-  private async executeCondition(node: Node) {
+  private async evaluateCondition(node: Node): Promise<boolean> {
     if (!this.page) throw new Error('Page not initialized');
     
     const conditionData = node.data.condition;
@@ -1153,14 +1291,51 @@ export class TestRunner {
           
         case 'custom':
           // カスタムJavaScript式の評価
-          conditionMet = await this.page.evaluate((expr) => {
-            try {
-              // @ts-ignore
-              return eval(expr);
-            } catch (e) {
-              return false;
+          // 変数を置換してから評価
+          let expression = conditionData.expression || '';
+          
+          // 変数の置換処理
+          // ${variable_name} または {{variable_name}} 形式の変数を置換
+          expression = expression.replace(/\$\{([^}]+)\}|\{\{([^}]+)\}\}/g, (match, p1, p2) => {
+            const varName = p1 || p2;
+            const value = this.variables.get(varName);
+            if (value !== undefined) {
+              // 文字列の場合はエスケープして引用符で囲む
+              if (typeof value === 'string') {
+                return JSON.stringify(value);
+              }
+              return String(value);
             }
-          }, conditionData.expression || '');
+            return match; // 変数が見つからない場合は元のまま
+          });
+          
+          // text_nodeId形式の変数も置換（後方互換性のため）
+          this.variables.forEach((value, key) => {
+            if (expression.includes(key)) {
+              const replacement = typeof value === 'string' ? JSON.stringify(value) : String(value);
+              expression = expression.replace(new RegExp(`\\b${key}\\b`, 'g'), replacement);
+            }
+          });
+          
+          console.log(`Evaluating expression: ${expression}`);
+          
+          // 式を評価
+          try {
+            // Function constructorを使って安全に評価
+            const func = new Function('return ' + expression);
+            conditionMet = func();
+          } catch (e) {
+            console.error(`Failed to evaluate expression: ${e}`);
+            // ブラウザコンテキストでも試す（互換性のため）
+            conditionMet = await this.page.evaluate((expr) => {
+              try {
+                // @ts-ignore
+                return eval(expr);
+              } catch (e) {
+                return false;
+              }
+            }, expression);
+          }
           break;
           
         default:
@@ -1169,14 +1344,18 @@ export class TestRunner {
       
       console.log(`Condition evaluated: ${conditionMet ? 'TRUE' : 'FALSE'}`);
       
-      // 条件分岐の結果をメタデータとして保存（フロー制御用）
-      // 注: 現在の実装では、条件分岐後のフロー制御は
-      // React Flow側のエッジ接続（true/falseハンドル）で管理される想定
+      return conditionMet;
       
     } catch (error) {
       console.error('Error evaluating condition:', error);
       throw error;
     }
+  }
+  
+  private async executeCondition(node: Node) {
+    // 条件の評価のみ行う（実際のフロー制御はrun()メソッドで行う）
+    const result = await this.evaluateCondition(node);
+    console.log(`Condition node executed, result: ${result}`);
   }
   
   private async executeLoop(node: Node) {
@@ -1301,5 +1480,39 @@ export class TestRunner {
 
   private emitUpdate() {
     this.socket.emit('test:update', this.testResult);
+  }
+
+  private emitLog(level: 'info' | 'warn' | 'error' | 'debug', message: string, data?: any) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      data,
+    };
+    
+    // デバッグモードの場合のみログを送信
+    if (this.debugMode) {
+      this.socket.emit('test:log', logEntry);
+    }
+    
+    // コンソールにも出力
+    if (level === 'error') {
+      console.error(message, data || '');
+    } else if (level === 'warn') {
+      console.warn(message, data || '');
+    } else if (level === 'debug') {
+      console.debug(message, data || '');
+    } else {
+      console.log(message, data || '');
+    }
+  }
+  
+  getScreenshots() {
+    return this.screenshots;
+  }
+  
+  clearScreenshots() {
+    this.screenshots = [];
+    this.socket.emit('screenshots-cleared');
   }
 }

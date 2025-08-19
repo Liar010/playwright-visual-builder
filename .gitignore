@@ -55,6 +55,10 @@ test-results/
 playwright-report/
 test-reports/
 
+# Templates (keep only default-templates.json)
+templates/*
+!templates/default-templates.json
+
 # Temporary files
 tmp/
 temp/

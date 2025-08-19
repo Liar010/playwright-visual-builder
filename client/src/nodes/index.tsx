@@ -39,10 +39,10 @@ const CustomNode = memo(({ data, type }: CustomNodeProps) => {
   const details = getNodeDetails();
 
   return (
-    <div className={`custom-node ${type}`}>
+    <div className={`custom-node ${type}`} title={details || undefined}>
       <Handle type="target" position={Position.Top} />
       <div className="node-label">{data.label}</div>
-      {details && <div className="node-detail">{details}</div>}
+      {details && <div className="node-detail" title={details}>{details}</div>}
       <Handle type="source" position={Position.Bottom} />
     </div>
   );

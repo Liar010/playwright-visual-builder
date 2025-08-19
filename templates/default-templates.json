@@ -1,0 +1,175 @@
+[
+  {
+    "id": "template-login-flow",
+    "name": "ログインフロー",
+    "description": "一般的なログインフローのテンプレート（ユーザー名・パスワード入力→ログインボタン）",
+    "category": "認証",
+    "tags": ["login", "authentication", "form"],
+    "nodes": [
+      {
+        "id": "nav-1",
+        "type": "navigate",
+        "position": { "x": 100, "y": 100 },
+        "data": {
+          "label": "ログインページへ移動",
+          "action": { "url": "https://example.com/login" }
+        }
+      },
+      {
+        "id": "fill-username",
+        "type": "fill",
+        "position": { "x": 100, "y": 200 },
+        "data": {
+          "label": "ユーザー名入力",
+          "action": { "selector": "#username", "value": "${username}" }
+        }
+      },
+      {
+        "id": "fill-password",
+        "type": "fill",
+        "position": { "x": 100, "y": 300 },
+        "data": {
+          "label": "パスワード入力",
+          "action": { "selector": "#password", "value": "${password}" }
+        }
+      },
+      {
+        "id": "click-login",
+        "type": "click",
+        "position": { "x": 100, "y": 400 },
+        "data": {
+          "label": "ログインボタンクリック",
+          "action": { "selector": "button[type='submit']" }
+        }
+      },
+      {
+        "id": "wait-navigation",
+        "type": "waitForURL",
+        "position": { "x": 100, "y": 500 },
+        "data": {
+          "label": "ダッシュボードへの遷移を待機",
+          "action": { "urlPattern": "/dashboard" }
+        }
+      }
+    ],
+    "edges": [
+      { "id": "e1", "source": "nav-1", "target": "fill-username" },
+      { "id": "e2", "source": "fill-username", "target": "fill-password" },
+      { "id": "e3", "source": "fill-password", "target": "click-login" },
+      { "id": "e4", "source": "click-login", "target": "wait-navigation" }
+    ],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "template-search-flow",
+    "name": "検索フロー",
+    "description": "検索ボックスに入力して結果を確認するフロー",
+    "category": "UI操作",
+    "tags": ["search", "input", "validation"],
+    "nodes": [
+      {
+        "id": "search-1",
+        "type": "fill",
+        "position": { "x": 100, "y": 100 },
+        "data": {
+          "label": "検索ボックスに入力",
+          "action": { "selector": "input[type='search']", "value": "${searchQuery}" }
+        }
+      },
+      {
+        "id": "search-2",
+        "type": "keyboard",
+        "position": { "x": 100, "y": 200 },
+        "data": {
+          "label": "Enterキーを押す",
+          "action": { "key": "Enter" }
+        }
+      },
+      {
+        "id": "search-3",
+        "type": "wait",
+        "position": { "x": 100, "y": 300 },
+        "data": {
+          "label": "結果表示を待機",
+          "action": { "timeout": 2000 }
+        }
+      },
+      {
+        "id": "search-4",
+        "type": "assertion",
+        "position": { "x": 100, "y": 400 },
+        "data": {
+          "label": "検索結果の存在確認",
+          "assertion": { 
+            "selector": ".search-results",
+            "comparison": "exists"
+          }
+        }
+      }
+    ],
+    "edges": [
+      { "id": "e1", "source": "search-1", "target": "search-2" },
+      { "id": "e2", "source": "search-2", "target": "search-3" },
+      { "id": "e3", "source": "search-3", "target": "search-4" }
+    ],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "template-form-validation",
+    "name": "フォームバリデーション",
+    "description": "フォームの入力検証を確認するテンプレート",
+    "category": "フォーム",
+    "tags": ["form", "validation", "error"],
+    "nodes": [
+      {
+        "id": "form-1",
+        "type": "click",
+        "position": { "x": 100, "y": 100 },
+        "data": {
+          "label": "送信ボタンをクリック（空の状態）",
+          "action": { "selector": "button[type='submit']" }
+        }
+      },
+      {
+        "id": "form-2",
+        "type": "assertion",
+        "position": { "x": 100, "y": 200 },
+        "data": {
+          "label": "エラーメッセージ確認",
+          "assertion": { 
+            "selector": ".error-message",
+            "comparison": "contains",
+            "expected": "必須"
+          }
+        }
+      },
+      {
+        "id": "form-3",
+        "type": "fill",
+        "position": { "x": 100, "y": 300 },
+        "data": {
+          "label": "有効な値を入力",
+          "action": { "selector": "input[required]", "value": "test@example.com" }
+        }
+      },
+      {
+        "id": "form-4",
+        "type": "click",
+        "position": { "x": 100, "y": 400 },
+        "data": {
+          "label": "送信ボタンを再度クリック",
+          "action": { "selector": "button[type='submit']" }
+        }
+      }
+    ],
+    "edges": [
+      { "id": "e1", "source": "form-1", "target": "form-2" },
+      { "id": "e2", "source": "form-2", "target": "form-3" },
+      { "id": "e3", "source": "form-3", "target": "form-4" }
+    ],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]

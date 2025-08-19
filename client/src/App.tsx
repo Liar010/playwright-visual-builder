@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -12,7 +12,7 @@ import ReactFlow, {
   OnConnect,
   ReactFlowProvider,
 } from 'reactflow';
-import { Layout, Button, Space, message } from 'antd';
+import { Layout, Button, Space, message, Badge } from 'antd';
 import {
   PlayCircleOutlined,
   SaveOutlined,
@@ -24,7 +24,9 @@ import {
   RobotOutlined,
   ExportOutlined,
   ImportOutlined,
-  FunctionOutlined
+  FunctionOutlined,
+  CameraOutlined,
+  AppstoreOutlined
 } from '@ant-design/icons';
 import NodePanel from './components/NodePanel';
 import VariablePanel from './components/VariablePanel';
@@ -34,13 +36,14 @@ import NodeEditor from './components/NodeEditor';
 import FlowLoader from './components/FlowLoader';
 import SaveFlowDialog from './components/SaveFlowDialog';
 import TestConfigDialog from './components/TestConfigDialog';
-import TemplateDialog from './components/TemplateDialog';
-import TemplateLoader from './components/TemplateLoader';
+import TemplateManager from './components/TemplateManager';
 import ExportFlowDialog from './components/ExportFlowDialog';
 import ImportFlowDialog from './components/ImportFlowDialog';
+import ScreenshotGallery, { type Screenshot, type LogEntry } from './components/ScreenshotGallery';
 import { nodeTypes } from './nodes';
 import type { TestFlow, TestConfig } from '@playwright-visual-builder/shared';
 import type { Variable } from './components/VariablePanel';
+import { initializeTemplates } from './utils/templateLoader';
 import './App.css';
 
 const { Header, Sider, Content } = Layout;
@@ -51,6 +54,11 @@ const initialEdges: Edge[] = [];
 function FlowBuilder() {
   const [nodes, setNodes] = useState<Node[]>(initialNodes);
   const [edges, setEdges] = useState<Edge[]>(initialEdges);
+  
+  // テンプレートの初期化
+  useEffect(() => {
+    initializeTemplates().catch(console.error);
+  }, []);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showCode, setShowCode] = useState(false);
   const [showVariables, setShowVariables] = useState(false);
@@ -59,13 +67,15 @@ function FlowBuilder() {
   const [isLoaderOpen, setIsLoaderOpen] = useState(false);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
   const [isConfigDialogOpen, setIsConfigDialogOpen] = useState(false);
-  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
-  const [isTemplateLoaderOpen, setIsTemplateLoaderOpen] = useState(false);
+  const [templateManagerMode, setTemplateManagerMode] = useState<'manage' | 'save' | 'load' | null>(null);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
+  const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [testConfig, setTestConfig] = useState<TestConfig>({
     headless: true,
     viewport: { width: 1280, height: 720 },
@@ -117,7 +127,8 @@ function FlowBuilder() {
       message.warning('実行するノードがありません');
       return;
     }
-    // 保存された設定ですぐに実行
+    // スクリーンショットをクリアして新しいテストを開始
+    setScreenshots([]);
     setIsRunning(true);
   };
 
@@ -152,16 +163,20 @@ function FlowBuilder() {
       message.warning('テンプレートとして保存するノードを選択してください');
       return;
     }
-    setIsTemplateDialogOpen(true);
+    setTemplateManagerMode('save');
   };
 
   const handleLoadTemplate = () => {
-    setIsTemplateLoaderOpen(true);
+    setTemplateManagerMode('load');
+  };
+  
+  const handleManageTemplates = () => {
+    setTemplateManagerMode('manage');
   };
 
   const handleTemplateLoad = (newNodes: Node[], newEdges: Edge[]) => {
-    setNodes(newNodes);
-    setEdges(newEdges);
+    setNodes(prev => [...prev, ...newNodes]);
+    setEdges(prev => [...prev, ...newEdges]);
   };
 
   const handleImport = (importedNodes: Node[], importedEdges: Edge[], importedConfig?: TestConfig) => {
@@ -234,19 +249,42 @@ function FlowBuilder() {
             title="フローをエクスポート"
             size="middle"
           />
-          <Button 
-            icon={<CopyOutlined />} 
-            onClick={handleSaveAsTemplate}
-            disabled={selectedNodes.length === 0}
-            title={selectedNodes.length > 0 ? `${selectedNodes.length}個のノードをテンプレート化` : 'ノードを選択してください'}
-            size="middle"
-          />
-          <Button 
-            icon={<FileAddOutlined />} 
-            onClick={handleLoadTemplate}
-            title="テンプレートから追加"
-            size="middle"
-          />
+          <Space.Compact>
+            {selectedNodes.length > 0 && (
+              <Button 
+                icon={<CopyOutlined />} 
+                onClick={handleSaveAsTemplate}
+                title={`${selectedNodes.length}個のノードをテンプレートとして保存`}
+                size="middle"
+                type="primary"
+                ghost
+              >
+                テンプレート保存
+              </Button>
+            )}
+            <Button 
+              icon={<FileAddOutlined />} 
+              onClick={handleLoadTemplate}
+              title="テンプレートから追加"
+              size="middle"
+            >
+              テンプレート
+            </Button>
+            <Button 
+              icon={<AppstoreOutlined />} 
+              onClick={handleManageTemplates}
+              title="テンプレートの編集・エクスポート・インポート"
+              size="middle"
+            />
+          </Space.Compact>
+          <Badge count={screenshots.length} size="small">
+            <Button
+              icon={<CameraOutlined />}
+              onClick={() => setIsGalleryOpen(true)}
+              title={`スクリーンショットギャラリー${screenshots.length > 0 ? ` (${screenshots.length})` : ''}`}
+              size="middle"
+            />
+          </Badge>
           <Button
             icon={<CodeOutlined />}
             onClick={() => setShowCode(!showCode)}
@@ -337,6 +375,12 @@ function FlowBuilder() {
           edges={edges}
           config={testConfig}
           onClose={() => setIsRunning(false)}
+          onScreenshot={(screenshot: Screenshot) => {
+            setScreenshots(prev => [...prev, screenshot]);
+          }}
+          onLog={(log: LogEntry) => {
+            setLogs(prev => [...prev, log].slice(-200)); // 最新200件を保持
+          }}
         />
       )}
       <NodeEditor
@@ -364,20 +408,16 @@ function FlowBuilder() {
         onRun={handleRunWithConfig}
         currentConfig={testConfig}
       />
-      <TemplateDialog
-        isOpen={isTemplateDialogOpen}
-        onClose={() => setIsTemplateDialogOpen(false)}
-        nodes={nodes}
-        edges={edges}
-        selectedNodes={selectedNodes}
-      />
-      <TemplateLoader
-        isOpen={isTemplateLoaderOpen}
-        onClose={() => setIsTemplateLoaderOpen(false)}
-        onLoad={handleTemplateLoad}
-        currentNodes={nodes}
-        currentEdges={edges}
-      />
+      {templateManagerMode && (
+        <TemplateManager
+          visible={!!templateManagerMode}
+          onClose={() => setTemplateManagerMode(null)}
+          mode={templateManagerMode}
+          onLoad={handleTemplateLoad}
+          selectedNodes={selectedNodes}
+          selectedEdges={edges}
+        />
+      )}
       <ExportFlowDialog
         open={isExportDialogOpen}
         onClose={() => setIsExportDialogOpen(false)}
@@ -389,6 +429,17 @@ function FlowBuilder() {
         open={isImportDialogOpen}
         onClose={() => setIsImportDialogOpen(false)}
         onImport={handleImport}
+      />
+      <ScreenshotGallery
+        visible={isGalleryOpen}
+        onClose={() => setIsGalleryOpen(false)}
+        screenshots={screenshots}
+        logs={logs}
+        debugMode={testConfig.debug || false}
+        onClear={() => {
+          setScreenshots([]);
+          setLogs([]);
+        }}
       />
     </Layout>
   );

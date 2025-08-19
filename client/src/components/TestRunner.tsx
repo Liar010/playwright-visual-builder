@@ -19,14 +19,24 @@ interface TestRunnerProps {
   edges: Edge[];
   config?: TestConfig;
   onClose: () => void;
+  onScreenshot?: (screenshot: any) => void;
+  onLog?: (log: LogEntry) => void;
 }
 
-export default function TestRunner({ nodes, edges, config, onClose }: TestRunnerProps) {
+interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  message: string;
+  data?: any;
+}
+
+export default function TestRunner({ nodes, edges, config, onClose, onScreenshot, onLog }: TestRunnerProps) {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [debugScreenshot, setDebugScreenshot] = useState<string | null>(null);
   const [showDebugView, setShowDebugView] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   useEffect(() => {
     const socketUrl = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
@@ -47,12 +57,28 @@ export default function TestRunner({ nodes, edges, config, onClose }: TestRunner
       setError(data.message);
       setTestResult((prev) => prev ? { ...prev, status: 'failed' } : null);
     });
+    
+    // スクリーンショットイベントをリッスン
+    newSocket.on('screenshot', (screenshot: any) => {
+      if (onScreenshot) {
+        onScreenshot(screenshot);
+      }
+    });
 
     // デバッグモードのスクリーンショット受信
     if (config?.debug) {
       setShowDebugView(true);
       newSocket.on('debug:screenshot', (data: { image: string; timestamp: number }) => {
         setDebugScreenshot(data.image);
+      });
+      
+      // デバッグログの受信
+      newSocket.on('test:log', (logEntry: LogEntry) => {
+        setLogs(prev => [...prev, logEntry].slice(-100)); // 最新100件のログを保持
+        // 親コンポーネントにもログを渡す
+        if (onLog) {
+          onLog(logEntry);
+        }
       });
     }
 
@@ -230,7 +256,7 @@ export default function TestRunner({ nodes, edges, config, onClose }: TestRunner
       />
         </div>
         {showDebugView && (
-          <div style={{ flex: 1, minWidth: '600px', height: '100%' }}>
+          <div style={{ flex: 1, minWidth: '600px', height: '100%', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <Card 
               title={
                 <Space>
@@ -239,7 +265,7 @@ export default function TestRunner({ nodes, edges, config, onClose }: TestRunner
                 </Space>
               }
               size="small"
-              style={{ height: '100%' }}
+              style={{ flex: '1 1 60%' }}
               bodyStyle={{ padding: '12px', height: 'calc(100% - 45px)', overflow: 'hidden' }}
             >
               {debugScreenshot ? (
@@ -267,6 +293,51 @@ export default function TestRunner({ nodes, edges, config, onClose }: TestRunner
                   </Space>
                 </div>
               )}
+            </Card>
+            <Card
+              title={<span>デバッグログ</span>}
+              size="small"
+              style={{ flex: '1 1 40%' }}
+              bodyStyle={{ padding: '8px', height: 'calc(100% - 45px)', overflow: 'auto' }}
+            >
+              <div style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+                {logs.length === 0 ? (
+                  <div style={{ color: '#999', padding: '8px' }}>ログがありません</div>
+                ) : (
+                  logs.map((log, index) => (
+                    <div 
+                      key={index} 
+                      style={{ 
+                        padding: '4px 8px',
+                        borderBottom: '1px solid #f0f0f0',
+                        color: log.level === 'error' ? '#ff4d4f' : 
+                               log.level === 'warn' ? '#faad14' :
+                               log.level === 'debug' ? '#999' : '#000',
+                      }}
+                    >
+                      <span style={{ color: '#999', marginRight: '8px' }}>
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </span>
+                      <Tag 
+                        color={
+                          log.level === 'error' ? 'error' :
+                          log.level === 'warn' ? 'warning' :
+                          log.level === 'debug' ? 'default' : 'success'
+                        }
+                        style={{ fontSize: '10px', margin: '0 8px 0 0' }}
+                      >
+                        {log.level.toUpperCase()}
+                      </Tag>
+                      <span>{log.message}</span>
+                      {log.data && (
+                        <pre style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#666' }}>
+                          {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : log.data}
+                        </pre>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </Card>
           </div>
         )}

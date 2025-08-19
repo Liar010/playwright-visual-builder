@@ -12,6 +12,7 @@
   background: white;
   border: 1px solid #ddd;
   min-width: 150px;
+  max-width: 250px;
 }
 
 .custom-node.navigate {
@@ -37,9 +38,16 @@
 .node-label {
   font-weight: 500;
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .node-detail {
   font-size: 12px;
   color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }

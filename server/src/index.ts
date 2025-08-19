@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import path from 'path';
 import fs from 'fs/promises';
 import flowRoutes from './routes/flows';
+import templateRoutes from './routes/templates';
 import { TestRunner } from './services/testRunner';
 
 const app = express();
@@ -19,18 +20,32 @@ const io = new Server(httpServer, {
 const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
 const FLOWS_DIR = path.join(process.cwd(), '../flows');
+const TEMPLATES_DIR = path.join(process.cwd(), '../templates');
 
 app.use(cors());
 app.use(express.json());
 
 app.use('/api/flows', flowRoutes);
+app.use('/api/templates', templateRoutes);
 
-async function ensureFlowsDirectory() {
+// Serve templates directory
+app.use('/templates', express.static(TEMPLATES_DIR));
+
+async function ensureDirectories() {
+  // Ensure flows directory
   try {
     await fs.access(FLOWS_DIR);
   } catch {
     await fs.mkdir(FLOWS_DIR, { recursive: true });
     console.log(`Created flows directory at ${FLOWS_DIR}`);
+  }
+  
+  // Ensure templates directory
+  try {
+    await fs.access(TEMPLATES_DIR);
+  } catch {
+    await fs.mkdir(TEMPLATES_DIR, { recursive: true });
+    console.log(`Created templates directory at ${TEMPLATES_DIR}`);
   }
 }
 
@@ -57,12 +72,14 @@ io.on('connection', (socket) => {
 });
 
 async function start() {
-  await ensureFlowsDirectory();
+  await ensureDirectories();
   
   httpServer.listen(Number(PORT), HOST, () => {
     console.log(`Server running on http://${HOST}:${PORT}`);
     console.log(`LAN access: http://<your-server-ip>:${PORT}`);
     console.log(`Flows will be saved to: ${FLOWS_DIR}`);
+    console.log(`Templates served from: ${TEMPLATES_DIR}`);
+    console.log(`Templates accessible at: http://${HOST}:${PORT}/templates/`);
   });
 }
 
