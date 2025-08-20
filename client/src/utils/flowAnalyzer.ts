@@ -27,15 +27,27 @@ export function analyzeFlowGroups(nodes: Node[], edges: Edge[]): NodeGroup[] {
     n => n.type === 'condition' || n.type === 'loop'
   );
 
+  console.log('条件/ループ開始ノード:', startNodes.map(n => ({
+    id: n.id,
+    type: n.type,
+    pairId: n.data?.pairId
+  })));
+
   for (const startNode of startNodes) {
     if (processedNodes.has(startNode.id)) continue;
 
     // ペアのEndノードを探す
     const endNodeId = startNode.data.pairId;
-    if (!endNodeId) continue;
+    if (!endNodeId) {
+      console.log(`ペアIDが見つかりません: ${startNode.id}`);
+      continue;
+    }
 
     const endNode = nodes.find(n => n.id === endNodeId);
-    if (!endNode) continue;
+    if (!endNode) {
+      console.log(`終了ノードが見つかりません: ${endNodeId}`);
+      continue;
+    }
 
     // 開始ノードと終了ノードの間にあるノードを見つける
     if (startNode.type === 'condition') {
@@ -72,16 +84,10 @@ export function analyzeFlowGroups(nodes: Node[], edges: Edge[]): NodeGroup[] {
       });
     }
 
-    // 処理済みとしてマーク
+    // 処理済みとしてマーク（入れ子のグループは除外）
     processedNodes.add(startNode.id);
     processedNodes.add(endNode.id);
-    if (startNode.type === 'condition') {
-      const { trueNodes, falseNodes } = groups[groups.length - 1] as any;
-      [...trueNodes, ...falseNodes].forEach((n: Node) => processedNodes.add(n.id));
-    } else {
-      const { innerNodes } = groups[groups.length - 1];
-      innerNodes.forEach((n: Node) => processedNodes.add(n.id));
-    }
+    // 内部ノードは処理済みとしてマークしない（入れ子グループの可能性があるため）
   }
 
   return groups;

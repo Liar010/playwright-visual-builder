@@ -50,7 +50,7 @@ export function generatePlaywrightCodeV2(nodes: Node[], edges: Edge[], variables
   }
 
   // コード生成（インデントレベルを管理）
-  const generatedLines = generateNodesCode(sortedNodes, groups, iframeContexts, 1, declaredVars);
+  const generatedLines = generateNodesCode(sortedNodes, edges, groups, iframeContexts, 1, declaredVars);
   lines.push(...generatedLines);
 
   lines.push('});');
@@ -59,6 +59,7 @@ export function generatePlaywrightCodeV2(nodes: Node[], edges: Edge[], variables
 
 function generateNodesCode(
   nodes: Node[],
+  edges: Edge[],
   groups: NodeGroup[],
   iframeContexts: IframeContext[],
   indentLevel: number,
@@ -160,7 +161,7 @@ function generateNodesCode(
       }
 
       // グループの終了コード
-      const endCode = generateGroupEndCode(group, indentLevel, declaredVars);
+      const endCode = generateGroupEndCode(group, indentLevel, declaredVars, nodes, edges, groups);
       lines.push(...endCode);
 
       // EndNodeも処理済みとしてマーク
@@ -272,7 +273,7 @@ function generateGroupStartCode(group: NodeGroup, indentLevel: number): string[]
   return lines;
 }
 
-function generateGroupEndCode(group: NodeGroup, indentLevel: number, declaredVars?: Set<string>): string[] {
+function generateGroupEndCode(group: NodeGroup, indentLevel: number, declaredVars?: Set<string>, nodes?: Node[], edges?: Edge[], groups?: NodeGroup[]): string[] {
   const lines: string[] = [];
   const indent = '  '.repeat(indentLevel);
 
@@ -280,14 +281,86 @@ function generateGroupEndCode(group: NodeGroup, indentLevel: number, declaredVar
     // Falseブランチにノードがある場合
     if (group.falseNodes && group.falseNodes.length > 0) {
       lines.push(`${indent}} else {`);
-      // Falseブランチのノードを処理
-      group.falseNodes.forEach(node => {
-        // TODO: iframeコンテキストのチェックが必要
-        const code = generateNodeCode(node, indentLevel + 1, false, null, declaredVars);
-        if (code) {
-          lines.push(code);
+      
+      // FALSEブランチのノードを再帰的に処理
+      if (edges && groups) {
+        // FALSEブランチ内の入れ子になった条件分岐を検出
+        const falseBranchNodeIds = new Set(group.falseNodes.map(n => n.id));
+        const falseBranchGroups = groups.filter(g => 
+          falseBranchNodeIds.has(g.startNode.id)
+        );
+        
+        console.log('FALSEブランチ内のノード:', group.falseNodes.map(n => ({
+          id: n.id,
+          type: n.type,
+          pairId: n.data?.pairId
+        })));
+        console.log('全グループ:', groups.map(g => ({
+          startId: g.startNode.id,
+          endId: g.endNode.id,
+          type: g.type
+        })));
+        console.log('検出されたFALSEブランチ内グループ:', falseBranchGroups.length);
+        
+        // FALSEブランチのノードを処理
+        const processedNodes = new Set<string>();
+        
+        for (const node of group.falseNodes) {
+          if (processedNodes.has(node.id)) continue;
+          
+          // このノードが入れ子グループの開始ノードかチェック
+          const nestedGroup = falseBranchGroups.find(g => g.startNode.id === node.id);
+          
+          if (nestedGroup) {
+            // 入れ子グループの開始コード
+            const startCode = generateGroupStartCode(nestedGroup, indentLevel + 1);
+            lines.push(...startCode);
+            
+            // 入れ子グループのTRUEブランチを処理
+            if (nestedGroup.trueNodes) {
+              nestedGroup.trueNodes.forEach(innerNode => {
+                processedNodes.add(innerNode.id);
+                const innerCode = generateNodeCode(innerNode, indentLevel + 2, false, null, declaredVars);
+                if (innerCode) {
+                  lines.push(innerCode);
+                }
+              });
+            }
+            
+            // 入れ子グループの終了コード（さらなる入れ子も処理）
+            const endCode = generateGroupEndCode(nestedGroup, indentLevel + 1, declaredVars, nodes, edges, groups);
+            lines.push(...endCode);
+            
+            // 処理済みノードをマーク
+            processedNodes.add(nestedGroup.startNode.id);
+            processedNodes.add(nestedGroup.endNode.id);
+            if (nestedGroup.trueNodes) {
+              nestedGroup.trueNodes.forEach(n => processedNodes.add(n.id));
+            }
+            if (nestedGroup.falseNodes) {
+              nestedGroup.falseNodes.forEach(n => processedNodes.add(n.id));
+            }
+          } else if (node.type !== 'conditionEnd') {
+            // 通常のノード
+            processedNodes.add(node.id);
+            const code = generateNodeCode(node, indentLevel + 1, false, null, declaredVars);
+            if (code) {
+              lines.push(code);
+            }
+          }
         }
-      });
+      } else {
+        // 旧実装（エッジ情報がない場合）
+        group.falseNodes.forEach(node => {
+          if (node.type !== 'conditionEnd') {
+            const code = generateNodeCode(node, indentLevel + 1, false, null, declaredVars);
+            if (code) {
+              lines.push(code);
+            }
+          }
+        });
+      }
+      
       lines.push(`${indent}}`);
     } else {
       // Falseブランチが空の場合
