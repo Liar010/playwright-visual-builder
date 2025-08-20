@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { NodeProps } from 'reactflow';
 import { Card, Typography } from 'antd';
 import { EditOutlined } from '@ant-design/icons';
 

@@ -159,7 +159,7 @@ router.delete('/:id', async (req, res) => {
       // 配列の場合は該当するテンプレートを削除
       const content = await fs.readFile(filePath, 'utf-8');
       const data = JSON.parse(content);
-      const filtered = data.filter(t => t.id !== templateId);
+      const filtered = data.filter((t: any) => t.id !== templateId);
       
       if (filtered.length === 0) {
         // 空になったらファイルを削除

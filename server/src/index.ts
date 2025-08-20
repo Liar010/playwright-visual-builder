@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import flowRoutes from './routes/flows';
 import templateRoutes from './routes/templates';
+import apiRoutes from './routes/api';
 import { TestRunner } from './services/testRunner';
 
 const app = express();
@@ -27,6 +28,7 @@ app.use(express.json());
 
 app.use('/api/flows', flowRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api', apiRoutes);
 
 // Serve templates directory
 app.use('/templates', express.static(TEMPLATES_DIR));

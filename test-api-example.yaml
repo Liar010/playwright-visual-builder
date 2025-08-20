@@ -1,0 +1,18 @@
+test:
+  name: Google Search Test (YAML)
+  config:
+    headless: false
+    viewport:
+      width: 1280
+      height: 720
+  steps:
+    - navigate: https://www.google.com
+    - wait: 1000
+    - screenshot: google-homepage
+    - input:
+        selector: textarea[name='q']
+        value: Playwright
+    - wait: 500
+    - click: input[type='submit']
+    - wait: 2000
+    - screenshot: search-results

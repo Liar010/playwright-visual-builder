@@ -11,7 +11,7 @@ import type {
 } from '@playwright-visual-builder/shared';
 
 export class TestRunner {
-  private socket: Socket;
+  private socket: Socket | null;
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
@@ -28,8 +28,8 @@ export class TestRunner {
   private executionOrder: string[] = []; // 実行順序を記録
   private variables: Map<string, any> = new Map(); // 変数ストレージ
 
-  constructor(socket: Socket, config?: TestConfig) {
-    this.socket = socket;
+  constructor(socket?: Socket, config?: TestConfig) {
+    this.socket = socket || null;
     this.config = config || {};
     this.debugMode = config?.debug || false;
     this.screenshotDir = path.join(process.cwd(), '../screenshots');
@@ -41,7 +41,7 @@ export class TestRunner {
     };
   }
 
-  async run(nodes: Node[], edges: Edge[]) {
+  async run(nodes: Node[], edges: Edge[]): Promise<TestResult & { screenshots?: any[] }> {
     try {
       await this.setup();
       
@@ -84,12 +84,14 @@ export class TestRunner {
           this.executionOrder.push(node.id);
           
           // 実行順序情報を含めて送信
-          this.socket.emit('test:step:start', {
-            nodeId: node.id,
-            order: this.executionOrder.length,
-            type: node.type,
-            label: node.data.label || 'If/Else'
-          });
+          if (this.socket) {
+            this.socket.emit('test:step:start', {
+              nodeId: node.id,
+              order: this.executionOrder.length,
+              type: node.type,
+              label: node.data.label || 'If/Else'
+            });
+          }
           
           // ステータスを更新
           const step = this.testResult.steps.find((s) => s.nodeId === node.id);
@@ -156,6 +158,7 @@ export class TestRunner {
       this.testResult.status = 'passed';
       this.testResult.endTime = new Date().toISOString();
       this.emitUpdate();
+      return { ...this.testResult, screenshots: this.screenshots };
     } catch (error) {
       this.testResult.status = 'failed';
       this.testResult.endTime = new Date().toISOString();
@@ -253,10 +256,12 @@ export class TestRunner {
           
           // Base64エンコードして送信
           const base64Image = screenshot.toString('base64');
-          this.socket.emit('debug:screenshot', {
-            image: `data:image/jpeg;base64,${base64Image}`,
-            timestamp: Date.now()
-          });
+          if (this.socket) {
+            this.socket.emit('debug:screenshot', {
+              image: `data:image/jpeg;base64,${base64Image}`,
+              timestamp: Date.now()
+            });
+          }
         }
       } catch (error) {
         // ページが閉じられた場合などのエラーは無視
@@ -282,12 +287,14 @@ export class TestRunner {
     step.startTime = new Date().toISOString();
     
     // 実行順序情報を含めて送信
-    this.socket.emit('test:step:start', {
-      nodeId: node.id,
-      order: this.executionOrder.length,
-      type: node.type,
-      label: node.data.label
-    });
+    if (this.socket) {
+      this.socket.emit('test:step:start', {
+        nodeId: node.id,
+        order: this.executionOrder.length,
+        type: node.type,
+        label: node.data.label
+      });
+    }
     
     this.emitUpdate();
 
@@ -563,7 +570,9 @@ export class TestRunner {
           this.screenshots.push(screenshotData);
           
           // クライアントにスクリーンショットを送信
-          this.socket.emit('screenshot', screenshotData);
+          if (this.socket) {
+            this.socket.emit('screenshot', screenshotData);
+          }
           console.log(`Screenshot saved: ${screenshotPath}`);
           break;
         }
@@ -718,11 +727,15 @@ export class TestRunner {
               }
               
               // ハンドラーを削除
-              this.page.off('dialog', handler);
+              if (this.page) {
+                this.page.off('dialog', handler);
+              }
               resolve();
             };
             
-            this.page.on('dialog', handler);
+            if (this.page) {
+              this.page.on('dialog', handler);
+            }
           });
           
           // ダイアログトリガーアクションがある場合は実行
@@ -1062,6 +1075,16 @@ export class TestRunner {
           }
           break;
           
+        case 'start':
+          // 開始ノードは何もしない
+          console.log('Starting test flow...');
+          break;
+          
+        case 'end':
+          // 終了ノードは何もしない
+          console.log('Test flow completed.');
+          break;
+          
         default:
           throw new Error(`Unknown node type: ${type}`);
       }
@@ -1346,7 +1369,7 @@ export class TestRunner {
           
           // 変数の置換処理
           // ${variable_name} または {{variable_name}} 形式の変数を置換
-          expression = expression.replace(/\$\{([^}]+)\}|\{\{([^}]+)\}\}/g, (match, p1, p2) => {
+          expression = expression.replace(/\$\{([^}]+)\}|\{\{([^}]+)\}\}/g, (match: string, p1: string, p2: string) => {
             const varName = p1 || p2;
             const value = this.variables.get(varName);
             if (value !== undefined) {
@@ -1530,7 +1553,9 @@ export class TestRunner {
   }
 
   private emitUpdate() {
-    this.socket.emit('test:update', this.testResult);
+    if (this.socket) {
+      this.socket.emit('test:update', this.testResult);
+    }
   }
 
   private emitLog(level: 'info' | 'warn' | 'error' | 'debug', message: string, data?: any) {
@@ -1542,7 +1567,7 @@ export class TestRunner {
     };
     
     // デバッグモードの場合のみログを送信
-    if (this.debugMode) {
+    if (this.debugMode && this.socket) {
       this.socket.emit('test:log', logEntry);
     }
     
@@ -1564,6 +1589,8 @@ export class TestRunner {
   
   clearScreenshots() {
     this.screenshots = [];
-    this.socket.emit('screenshots-cleared');
+    if (this.socket) {
+      this.socket.emit('screenshots-cleared');
+    }
   }
 }

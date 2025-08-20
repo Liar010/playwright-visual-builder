@@ -59,6 +59,9 @@ test-reports/
 templates/*
 !templates/default-templates.json
 
+# File uploads
+uploads/
+
 # Temporary files
 tmp/
 temp/
