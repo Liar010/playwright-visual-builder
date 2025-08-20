@@ -438,6 +438,8 @@ function FlowBuilder() {
         debugMode={testConfig.debug || false}
         onClear={() => {
           setScreenshots([]);
+        }}
+        onClearLogs={() => {
           setLogs([]);
         }}
       />

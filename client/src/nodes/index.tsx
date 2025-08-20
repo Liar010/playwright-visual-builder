@@ -5,6 +5,7 @@ import ConditionNode from './ConditionNode';
 import LoopNode from './LoopNode';
 import EndNode from './EndNode';
 import CustomCodeNode from './CustomCodeNode';
+import CommentNode from './CommentNode';
 
 interface CustomNodeData {
   label: string;
@@ -106,4 +107,6 @@ export const nodeTypes = {
   networkIntercept: CustomNode,
   // Custom
   customCode: CustomCodeNode,
+  // Comment
+  comment: CommentNode,
 };

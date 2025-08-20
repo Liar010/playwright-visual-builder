@@ -25,6 +25,7 @@ export class TestRunner {
   private screenshotInterval: NodeJS.Timeout | null = null;
   private retryCount: number = 3; // デフォルトのリトライ回数
   private retryDelay: number = 1000; // リトライ間の待機時間（ミリ秒）
+  private executionOrder: string[] = []; // 実行順序を記録
   private variables: Map<string, any> = new Map(); // 変数ストレージ
 
   constructor(socket: Socket, config?: TestConfig) {
@@ -79,8 +80,35 @@ export class TestRunner {
         
         // 条件分岐ノードの特別処理
         if (node.type === 'condition') {
+          // 条件分岐開始を実行順序に記録
+          this.executionOrder.push(node.id);
+          
+          // 実行順序情報を含めて送信
+          this.socket.emit('test:step:start', {
+            nodeId: node.id,
+            order: this.executionOrder.length,
+            type: node.type,
+            label: node.data.label || 'If/Else'
+          });
+          
+          // ステータスを更新
+          const step = this.testResult.steps.find((s) => s.nodeId === node.id);
+          if (step) {
+            step.status = 'running';
+            step.startTime = new Date().toISOString();
+            this.emitUpdate();
+          }
+          
+          console.log(`Executing condition: ${node.data.label || 'If/Else'}`);
           const conditionResult = await this.evaluateCondition(node);
           console.log(`Condition evaluated: ${conditionResult ? 'TRUE' : 'FALSE'}`);
+          
+          // 条件評価後にステータスを更新
+          if (step) {
+            step.status = 'passed';
+            step.endTime = new Date().toISOString();
+            this.emitUpdate();
+          }
           
           // 条件に基づいて適切なパスのエッジを取得
           const outgoingEdges = edgesBySource.get(nodeId) || [];
@@ -96,6 +124,12 @@ export class TestRunner {
               // ハンドルが指定されていない場合は両方のパスを実行（後方互換性）
               await executeNodeRecursive(edge.target);
             }
+          }
+        } else if (node.type === 'comment') {
+          // コメントノードは完全にスキップして次のノードへ進む
+          const outgoingEdges = edgesBySource.get(nodeId) || [];
+          for (const edge of outgoingEdges) {
+            await executeNodeRecursive(edge.target);
           }
         } else {
           // 通常のノードを実行
@@ -241,8 +275,20 @@ export class TestRunner {
     const step = this.testResult.steps.find((s) => s.nodeId === node.id);
     if (!step || !this.page) return;
 
+    // 実行順序を記録
+    this.executionOrder.push(node.id);
+    
     step.status = 'running';
     step.startTime = new Date().toISOString();
+    
+    // 実行順序情報を含めて送信
+    this.socket.emit('test:step:start', {
+      nodeId: node.id,
+      order: this.executionOrder.length,
+      type: node.type,
+      label: node.data.label
+    });
+    
     this.emitUpdate();
 
     try {
@@ -994,6 +1040,10 @@ export class TestRunner {
           }
           break;
 
+        case 'comment':
+          // コメントノードは完全にスキップ（ログも出力しない）
+          break;
+
         case 'customCode':
           // カスタムコードの実行
           if (data.customCode?.code) {
@@ -1354,8 +1404,9 @@ export class TestRunner {
   
   private async executeCondition(node: Node) {
     // 条件の評価のみ行う（実際のフロー制御はrun()メソッドで行う）
+    // この関数は executeNode から呼ばれる場合のみ使用される
     const result = await this.evaluateCondition(node);
-    console.log(`Condition node executed, result: ${result}`);
+    return result;
   }
   
   private async executeLoop(node: Node) {

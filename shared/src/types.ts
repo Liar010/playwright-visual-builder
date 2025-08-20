@@ -54,7 +54,9 @@ export type NodeType =
   // Network
   | 'networkIntercept'
   // Custom
-  | 'customCode';
+  | 'customCode'
+  // Comment/Note (for documentation only)
+  | 'comment';
 
 export interface TestNode {
   id: string;

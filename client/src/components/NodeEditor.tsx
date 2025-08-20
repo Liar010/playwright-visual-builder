@@ -221,6 +221,9 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
             wrapInTryCatch: values.customCodeWrapInTryCatch || false,
           };
           break;
+        case 'comment':
+          updatedData.comment = values.comment || '';
+          break;
       }
 
       onUpdate(node.id, updatedData);
@@ -850,6 +853,23 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
             </Form.Item>
             <Form.Item name="customCodeWrapInTryCatch" valuePropName="checked">
               <Checkbox>try-catchでラップする（エラーハンドリング）</Checkbox>
+            </Form.Item>
+          </>
+        );
+
+      case 'comment':
+        return (
+          <>
+            {commonFields}
+            <Form.Item
+              label="コメント内容"
+              name="comment"
+              rules={[{ required: true, message: 'コメントを入力してください' }]}
+            >
+              <Input.TextArea 
+                rows={8} 
+                placeholder="テストの説明、注意事項、TODOなどを記載" 
+              />
             </Form.Item>
           </>
         );

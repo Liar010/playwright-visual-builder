@@ -622,6 +622,10 @@ function generateNodeCode(node: Node, indentLevel: number, isInIframeContext: bo
       break;
 
     // Custom Code
+    case 'comment':
+      // コメントノードはコード生成をスキップ
+      return '';
+    
     case 'customCode':
       if (data.customCode?.code) {
         const customCode = data.customCode.code;

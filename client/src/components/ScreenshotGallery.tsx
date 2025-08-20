@@ -36,11 +36,12 @@ interface ScreenshotGalleryProps {
   logs?: LogEntry[];
   debugMode?: boolean;
   onClear?: () => void;
+  onClearLogs?: () => void;
 }
 
 export type { Screenshot, LogEntry };
 
-export default function ScreenshotGallery({ visible, onClose, screenshots, logs = [], debugMode = false, onClear }: ScreenshotGalleryProps) {
+export default function ScreenshotGallery({ visible, onClose, screenshots, logs = [], debugMode = false, onClear, onClearLogs }: ScreenshotGalleryProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const handleDownload = (screenshot: Screenshot) => {
@@ -263,13 +264,35 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
                 </Space>
               ),
               children: (
-                <div style={{ 
-                  maxHeight: '70vh', 
-                  overflowY: 'auto',
-                  padding: '8px',
-                  backgroundColor: '#fafafa'
-                }}>
-                  {logs.length === 0 ? (
+                <div>
+                  {logs.length > 0 && onClearLogs && (
+                    <div style={{ 
+                      padding: '8px 16px', 
+                      borderBottom: '1px solid #e8e8e8',
+                      backgroundColor: 'white',
+                      display: 'flex',
+                      justifyContent: 'flex-end'
+                    }}>
+                      <Button 
+                        size="small" 
+                        danger 
+                        icon={<DeleteOutlined />}
+                        onClick={() => {
+                          onClearLogs();
+                          message.info('ログをクリアしました');
+                        }}
+                      >
+                        ログをクリア
+                      </Button>
+                    </div>
+                  )}
+                  <div style={{ 
+                    maxHeight: '60vh', 
+                    overflowY: 'auto',
+                    padding: '8px',
+                    backgroundColor: '#fafafa'
+                  }}>
+                    {logs.length === 0 ? (
                     <Empty 
                       image={Empty.PRESENTED_IMAGE_SIMPLE}
                       description="ログがありません"
@@ -324,6 +347,7 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
                       ))}
                     </div>
                   )}
+                  </div>
                 </div>
               )
             }] : [])

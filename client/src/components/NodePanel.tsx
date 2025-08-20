@@ -368,6 +368,16 @@ const nodeTemplates = [
     },
     category: 'advanced',
   },
+  {
+    type: 'comment' as NodeType,
+    label: 'コメント',
+    icon: <EditOutlined />,
+    defaultData: {
+      label: 'コメント',
+      comment: 'ここにコメントを入力\n\nテストの説明や注意事項を記載できます',
+    },
+    category: 'advanced',
+  },
 ];
 
 const categories = [

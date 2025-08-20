@@ -37,6 +37,13 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
   const [debugScreenshot, setDebugScreenshot] = useState<string | null>(null);
   const [showDebugView, setShowDebugView] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [executionOrder, setExecutionOrder] = useState<Array<{
+    nodeId: string;
+    order: number;
+    type: string;
+    label: string;
+    status?: string;
+  }>>([]);
 
   useEffect(() => {
     const socketUrl = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
@@ -56,6 +63,11 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
     newSocket.on('test:error', (data: { message: string }) => {
       setError(data.message);
       setTestResult((prev) => prev ? { ...prev, status: 'failed' } : null);
+    });
+    
+    // 実行順序の受信
+    newSocket.on('test:step:start', (data: { nodeId: string; order: number; type: string; label: string }) => {
+      setExecutionOrder(prev => [...prev, { ...data, status: 'running' }]);
     });
     
     // スクリーンショットイベントをリッスン
@@ -193,11 +205,26 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
       </div>
       <List
         size="small"
-        dataSource={testResult?.steps || []}
-        renderItem={(step: StepResult) => {
-          const node = nodes.find((n) => n.id === step.nodeId);
+        dataSource={executionOrder.length > 0 ? executionOrder : []}
+        renderItem={(item) => {
+          const step = testResult?.steps.find(s => s.nodeId === item.nodeId);
+          if (!step) return null;
+          
+          const nodeType = item.type;
+          
+          // 条件分岐のラベルを設定
+          let displayLabel = item.label || '不明なステップ';
+          if (nodeType === 'condition') {
+            displayLabel = `⊢ 条件分岐: ${displayLabel}`;
+          } else if (nodeType === 'conditionEnd') {
+            displayLabel = '⊣ 条件分岐終了';
+          }
+          
           return (
-            <List.Item style={{ padding: '8px 0' }}>
+            <List.Item style={{ 
+              padding: '8px 0',
+              opacity: step.status === 'skipped' ? 0.5 : 1,
+            }}>
               <div style={{ width: '100%' }}>
                 <div
                   style={{
@@ -207,14 +234,23 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
                   }}
                 >
                   <Space size="small">
+                    <Text type="secondary" style={{ fontSize: '12px', minWidth: '20px' }}>
+                      {item.order}
+                    </Text>
                     {getStatusIcon(step.status)}
-                    <Text>{node?.data.label || '不明なステップ'}</Text>
+                    <Text style={{ 
+                      fontWeight: nodeType === 'condition' || nodeType === 'conditionEnd' ? 'bold' : 'normal',
+                      color: step.status === 'skipped' ? '#999' : 'inherit'
+                    }}>
+                      {displayLabel}
+                    </Text>
                   </Space>
                   <Tag color={getStatusColor(step.status)}>
                     {step.status === 'running' ? '実行中' :
                      step.status === 'passed' ? '成功' :
                      step.status === 'failed' ? '失敗' :
-                     step.status === 'pending' ? '待機中' : step.status}
+                     step.status === 'skipped' ? 'スキップ' :
+                     step.status === 'pending' ? '待機中' : step.status}  
                   </Tag>
                 </div>
                 {step.error && (
@@ -256,7 +292,7 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
       />
         </div>
         {showDebugView && (
-          <div style={{ flex: 1, minWidth: '600px', height: '100%', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, minWidth: '600px', height: '100%' }}>
             <Card 
               title={
                 <Space>
@@ -265,7 +301,7 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
                 </Space>
               }
               size="small"
-              style={{ flex: '1 1 60%' }}
+              style={{ height: '100%' }}
               bodyStyle={{ padding: '12px', height: 'calc(100% - 45px)', overflow: 'hidden' }}
             >
               {debugScreenshot ? (
@@ -293,51 +329,6 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
                   </Space>
                 </div>
               )}
-            </Card>
-            <Card
-              title={<span>デバッグログ</span>}
-              size="small"
-              style={{ flex: '1 1 40%' }}
-              bodyStyle={{ padding: '8px', height: 'calc(100% - 45px)', overflow: 'auto' }}
-            >
-              <div style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                {logs.length === 0 ? (
-                  <div style={{ color: '#999', padding: '8px' }}>ログがありません</div>
-                ) : (
-                  logs.map((log, index) => (
-                    <div 
-                      key={index} 
-                      style={{ 
-                        padding: '4px 8px',
-                        borderBottom: '1px solid #f0f0f0',
-                        color: log.level === 'error' ? '#ff4d4f' : 
-                               log.level === 'warn' ? '#faad14' :
-                               log.level === 'debug' ? '#999' : '#000',
-                      }}
-                    >
-                      <span style={{ color: '#999', marginRight: '8px' }}>
-                        {new Date(log.timestamp).toLocaleTimeString()}
-                      </span>
-                      <Tag 
-                        color={
-                          log.level === 'error' ? 'error' :
-                          log.level === 'warn' ? 'warning' :
-                          log.level === 'debug' ? 'default' : 'success'
-                        }
-                        style={{ fontSize: '10px', margin: '0 8px 0 0' }}
-                      >
-                        {log.level.toUpperCase()}
-                      </Tag>
-                      <span>{log.message}</span>
-                      {log.data && (
-                        <pre style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#666' }}>
-                          {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : log.data}
-                        </pre>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
             </Card>
           </div>
         )}
