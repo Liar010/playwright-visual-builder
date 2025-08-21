@@ -26,7 +26,7 @@ import {
   ImportOutlined,
   FunctionOutlined,
   CameraOutlined,
-  AppstoreOutlined
+  DatabaseOutlined
 } from '@ant-design/icons';
 import NodePanel from './components/NodePanel';
 import VariablePanel from './components/VariablePanel';
@@ -273,7 +273,7 @@ function FlowBuilder() {
               テンプレート
             </Button>
             <Button 
-              icon={<AppstoreOutlined />} 
+              icon={<FileAddOutlined />} 
               onClick={handleManageTemplates}
               title="テンプレートの編集・エクスポート・インポート"
               size="middle"
@@ -288,7 +288,7 @@ function FlowBuilder() {
             />
           </Badge>
           <Button
-            icon={<AppstoreOutlined />}
+            icon={<DatabaseOutlined />}
             onClick={() => setIsSelectorManagerOpen(true)}
             title="セレクタ管理"
             size="middle"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Node } from 'reactflow';
-import { Form, Input, InputNumber, Select, Drawer, Button, Space, Popconfirm, Checkbox } from 'antd';
+import { Form, Input, InputNumber, Select, Drawer, Button, Space, Popconfirm, Checkbox, AutoComplete } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import type { NodeType } from '@playwright-visual-builder/shared';
 import { selectorService, SavedSelectors } from '../services/selectorService';
@@ -19,6 +19,7 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
   const [form] = Form.useForm();
   const [savedSelectors, setSavedSelectors] = useState<SavedSelectors>({});
   const [loadingSelectors, setLoadingSelectors] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string }[]>([]);
 
   useEffect(() => {
     if (node) {
@@ -93,6 +94,33 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
     try {
       const selectors = await selectorService.getCurrentFlowSelectors();
       setSavedSelectors(selectors);
+      
+      // すべてのフローからカテゴリ一覧を取得
+      const allSelectors = await selectorService.getAllSelectors();
+      const categories = new Set<string>();
+      
+      Object.values(allSelectors).forEach((flowSelectors: any) => {
+        if (flowSelectors.version === '2.0' && flowSelectors.categories) {
+          Object.keys(flowSelectors.categories).forEach(cat => {
+            categories.add(cat);
+            // サブカテゴリも候補に追加（例: admin/settings）
+            if (cat.includes('/')) {
+              const parts = cat.split('/');
+              const parent = parts[0];
+              if (!categories.has(parent)) {
+                categories.add(parent);
+              }
+            }
+          });
+        }
+      });
+      
+      // デフォルトカテゴリも追加
+      categories.add('default');
+      
+      // AutoCompleteオプションとして設定
+      const options = Array.from(categories).sort().map(cat => ({ value: cat }));
+      setCategoryOptions(options);
     } catch (error) {
       console.error('Failed to load selectors:', error);
     } finally {
@@ -974,7 +1002,14 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
               rules={[{ required: true }]}
               initialValue="default"
             >
-              <Input placeholder="例: login, admin/settings, test/e2e" />
+              <AutoComplete
+                options={categoryOptions}
+                placeholder="例: login, admin/settings, test/e2e"
+                filterOption={(inputValue, option) =>
+                  option!.value.toLowerCase().includes(inputValue.toLowerCase())
+                }
+                allowClear
+              />
             </Form.Item>
             <Form.Item 
               name="storageLabel" 

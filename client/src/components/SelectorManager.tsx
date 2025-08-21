@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal, Table, Button, Space, Typography, Tag, Popconfirm, Input, message, Card, Empty, Tooltip, Tree, TreeDataNode } from 'antd';
-import { DeleteOutlined, CopyOutlined, EditOutlined, ReloadOutlined, SearchOutlined, FolderOutlined, FileOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, ReloadOutlined, SearchOutlined, FolderOutlined, FileOutlined } from '@ant-design/icons';
 import { 
   selectorService, 
   SavedSelectors, 
@@ -132,10 +132,6 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
     }
   };
 
-  const handleCopy = (selector: string) => {
-    navigator.clipboard.writeText(selector);
-    message.success('セレクタをコピーしました');
-  };
 
   const handleSelectSelector = (selector: string) => {
     if (onSelectorSelect) {
@@ -228,11 +224,6 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
                   >
                     {isEditing ? '保存' : '編集'}
                   </Button>
-                  <Button
-                    size="small"
-                    icon={<CopyOutlined />}
-                    onClick={() => handleCopy(record.selector)}
-                  />
                   <Popconfirm
                     title="このセレクタを削除しますか？"
                     onConfirm={() => handleDelete(record.category, record.label, record.name)}
