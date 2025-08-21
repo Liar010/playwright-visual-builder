@@ -23,11 +23,9 @@ import {
   FolderOpenOutlined,
   FolderOutlined,
   SaveOutlined,
-  PlusOutlined,
   FileTextOutlined,
   ExportOutlined,
   ImportOutlined,
-  CopyOutlined,
   RightOutlined,
   DownOutlined,
   AppstoreOutlined,
@@ -86,7 +84,7 @@ export default function TemplateManager({
   const [saveForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['default']));
-  const [selectedCategory, setSelectedCategory] = useState<string>('default');
+  // const [selectedCategory, setSelectedCategory] = useState<string>('default'); // 未使用
   const hasInitialized = useRef(false);
 
   // テンプレートを読み込む
@@ -147,10 +145,10 @@ export default function TemplateManager({
     }
   };
 
-  const saveTemplates = async (newTemplates: Template[]) => {
-    // ファイルベースの保存は個別に行うため、ここでは状態更新のみ
-    setTemplates(newTemplates);
-  };
+  // const saveTemplates = async (newTemplates: Template[]) => {
+  //   // ファイルベースの保存は個別に行うため、ここでは状態更新のみ
+  //   setTemplates(newTemplates);
+  // };
 
   // 新規テンプレート保存
   const handleSaveNew = async () => {
@@ -657,7 +655,7 @@ export default function TemplateManager({
                       {categoryConfig[category]?.icon || <FolderOutlined />}
                     </span>
                     <Text strong>{category}</Text>
-                    <Tag size="small" style={{ marginLeft: 'auto' }}>
+                    <Tag style={{ marginLeft: 'auto' }}>
                       {categoryTemplates.length}
                     </Tag>
                   </div>
@@ -693,7 +691,7 @@ export default function TemplateManager({
                             </div>
                           </Space>
                           <Space>
-                            <Tag color="blue" size="small">{template.nodes.length}ノード</Tag>
+                            <Tag color="blue">{template.nodes.length}ノード</Tag>
                             <Button
                               size="small"
                               type="primary"

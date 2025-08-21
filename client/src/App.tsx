@@ -40,6 +40,7 @@ import TemplateManager from './components/TemplateManager';
 import ExportFlowDialog from './components/ExportFlowDialog';
 import ImportFlowDialog from './components/ImportFlowDialog';
 import ScreenshotGallery, { type Screenshot, type LogEntry } from './components/ScreenshotGallery';
+import SelectorManager from './components/SelectorManager';
 import { nodeTypes } from './nodes';
 import type { TestFlow, TestConfig } from '@playwright-visual-builder/shared';
 import type { Variable } from './components/VariablePanel';
@@ -71,6 +72,7 @@ function FlowBuilder() {
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isSelectorManagerOpen, setIsSelectorManagerOpen] = useState(false);
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
@@ -286,6 +288,12 @@ function FlowBuilder() {
             />
           </Badge>
           <Button
+            icon={<AppstoreOutlined />}
+            onClick={() => setIsSelectorManagerOpen(true)}
+            title="セレクタ管理"
+            size="middle"
+          />
+          <Button
             icon={<CodeOutlined />}
             onClick={() => setShowCode(!showCode)}
             title={showCode ? 'コードを非表示' : 'コードを表示'}
@@ -442,6 +450,10 @@ function FlowBuilder() {
         onClearLogs={() => {
           setLogs([]);
         }}
+      />
+      <SelectorManager
+        isOpen={isSelectorManagerOpen}
+        onClose={() => setIsSelectorManagerOpen(false)}
       />
     </Layout>
   );

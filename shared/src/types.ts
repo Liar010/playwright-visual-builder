@@ -1,4 +1,7 @@
 export type NodeType = 
+  // Flow Control
+  | 'start'
+  | 'end'
   // Navigation
   | 'navigate'
   | 'goBack'
@@ -56,7 +59,9 @@ export type NodeType =
   // Custom
   | 'customCode'
   // Comment/Note (for documentation only)
-  | 'comment';
+  | 'comment'
+  // Selector Discovery
+  | 'discoverSelectors';
 
 export interface TestNode {
   id: string;

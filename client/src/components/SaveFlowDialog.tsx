@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Form, Input, Select, message } from 'antd';
 import { Node, Edge } from 'reactflow';
+import { API_ENDPOINTS } from '../config/api';
 
 interface SaveFlowDialogProps {
   isOpen: boolean;
@@ -25,9 +26,7 @@ export default function SaveFlowDialog({
       const values = await form.validateFields();
       setLoading(true);
 
-      const apiUrl = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-        ? `http://${window.location.hostname}:3002/api/flows?format=${values.format}`
-        : `/api/flows?format=${values.format}`;
+      const apiUrl = `${API_ENDPOINTS.flows}?format=${values.format}`;
       
       const response = await fetch(apiUrl, {
         method: 'POST',

@@ -6,6 +6,7 @@ import LoopNode from './LoopNode';
 import EndNode from './EndNode';
 import CustomCodeNode from './CustomCodeNode';
 import CommentNode from './CommentNode';
+import { DiscoverSelectorsNode } from './DiscoverSelectorsNode';
 
 interface CustomNodeData {
   label: string;
@@ -109,4 +110,6 @@ export const nodeTypes = {
   customCode: CustomCodeNode,
   // Comment
   comment: CommentNode,
+  // Selector Discovery
+  discoverSelectors: DiscoverSelectorsNode,
 };

@@ -25,7 +25,8 @@ import {
   FileAddOutlined,
   SwitcherOutlined,
   DatabaseOutlined,
-  CodeOutlined
+  CodeOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import type { NodeType } from '@playwright-visual-builder/shared';
 
@@ -375,6 +376,22 @@ const nodeTemplates = [
     defaultData: {
       label: 'コメント',
       comment: 'ここにコメントを入力\n\nテストの説明や注意事項を記載できます',
+    },
+    category: 'advanced',
+  },
+  {
+    type: 'discoverSelectors' as NodeType,
+    label: 'セレクタ探索',
+    icon: <SearchOutlined />,
+    defaultData: {
+      label: 'セレクタ探索',
+      storageLabel: '',  // 空の場合はノードIDを使用
+      description: '',
+      options: {
+        inputs: true,
+        buttons: true,
+        links: true,
+      },
     },
     category: 'advanced',
   },

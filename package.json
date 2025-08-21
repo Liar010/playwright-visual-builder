@@ -12,6 +12,9 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
+    "start:server": "node server/dist/index.js",
+    "preview": "npm run preview -w client",
+    "build:prod": "npm run build && echo 'Build completed successfully!'",
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
     "start": "npm run start -w server"
   },
@@ -22,6 +25,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/multer": "^2.0.0",
     "@types/uuid": "^10.0.0",
+    "dotenv": "^17.2.1",
     "js-yaml": "^4.1.0",
     "multer": "^2.0.2",
     "uuid": "^11.1.0"

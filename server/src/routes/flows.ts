@@ -5,7 +5,9 @@ import yaml from 'yaml';
 import type { TestFlow } from '@playwright-visual-builder/shared';
 
 const router = Router();
-const FLOWS_DIR = path.join(process.cwd(), '../flows');
+const FLOWS_DIR = process.env.NODE_ENV === 'production' 
+  ? path.resolve(process.cwd(), 'flows')
+  : path.resolve(process.cwd(), '../flows');
 
 router.get('/', async (req, res) => {
   try {
@@ -13,16 +15,27 @@ router.get('/', async (req, res) => {
     const flows = await Promise.all(
       files
         .filter((f) => f.endsWith('.json') || f.endsWith('.yaml'))
+        .filter((f) => !f.includes('selectors')) // セレクタファイルを除外
         .map(async (file) => {
-          const content = await fs.readFile(path.join(FLOWS_DIR, file), 'utf-8');
-          if (file.endsWith('.yaml')) {
-            return yaml.parse(content);
+          try {
+            const filePath = path.join(FLOWS_DIR, file);
+            const stats = await fs.stat(filePath);
+            if (stats.isFile()) {
+              const content = await fs.readFile(filePath, 'utf-8');
+              if (file.endsWith('.yaml')) {
+                return yaml.parse(content);
+              }
+              return JSON.parse(content);
+            }
+          } catch (err) {
+            console.error(`Error reading flow file ${file}:`, err);
           }
-          return JSON.parse(content);
+          return null;
         })
     );
-    res.json(flows);
+    res.json(flows.filter(f => f !== null));
   } catch (error) {
+    console.error('Failed to load flows:', error);
     res.status(500).json({ error: 'Failed to load flows' });
   }
 });

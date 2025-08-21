@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Node } from 'reactflow';
 import { Form, Input, InputNumber, Select, Drawer, Button, Space, Popconfirm, Checkbox } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import type { NodeType } from '@playwright-visual-builder/shared';
+import { selectorService, SavedSelectors } from '../services/selectorService';
+import SelectorInput from './SelectorInput';
 
 interface NodeEditorProps {
   node: Node | null;
@@ -15,6 +17,8 @@ interface NodeEditorProps {
 
 export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, variables = [] }: NodeEditorProps) {
   const [form] = Form.useForm();
+  const [savedSelectors, setSavedSelectors] = useState<SavedSelectors>({});
+  const [loadingSelectors, setLoadingSelectors] = useState(false);
 
   useEffect(() => {
     if (node) {
@@ -50,9 +54,51 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
         values.customCodeWrapInTryCatch = node.data.customCode.wrapInTryCatch;
       }
       
+      // セレクタ探索ノードの値設定
+      if (node.type === 'discoverSelectors') {
+        values.category = node.data.category || 'default';
+        values.storageLabel = node.data.storageLabel;
+        values.description = node.data.description;
+        values.optionInputs = node.data.options?.inputs !== false;
+        values.optionButtons = node.data.options?.buttons !== false;
+        values.optionLinks = node.data.options?.links !== false;
+        values.optionSelects = node.data.options?.selects !== false;
+        values.optionCheckboxes = node.data.options?.checkboxes !== false;
+        values.optionRadios = node.data.options?.radios !== false;
+        values.optionTextareas = node.data.options?.textareas !== false;
+        values.optionTables = node.data.options?.tables === true;
+        values.optionImages = node.data.options?.images === true;
+        values.optionIframes = node.data.options?.iframes === true;
+        values.optionErrors = node.data.options?.errors === true;
+      }
+      
+      // コメントノードの値設定
+      if (node.type === 'comment') {
+        values.comment = node.data.comment;
+      }
+      
       form.setFieldsValue(values);
     }
   }, [node, form]);
+
+  // セレクタをロード
+  useEffect(() => {
+    if (isOpen) {
+      loadSavedSelectors();
+    }
+  }, [isOpen]);
+
+  const loadSavedSelectors = async () => {
+    setLoadingSelectors(true);
+    try {
+      const selectors = await selectorService.getCurrentFlowSelectors();
+      setSavedSelectors(selectors);
+    } catch (error) {
+      console.error('Failed to load selectors:', error);
+    } finally {
+      setLoadingSelectors(false);
+    }
+  };
 
   const handleSave = () => {
     const values = form.getFieldsValue();
@@ -224,6 +270,24 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
         case 'comment':
           updatedData.comment = values.comment || '';
           break;
+        case 'discoverSelectors':
+          updatedData.category = values.category || 'default';
+          updatedData.storageLabel = values.storageLabel || values.label || node.id;
+          updatedData.description = values.description;
+          updatedData.options = {
+            inputs: values.optionInputs !== false,
+            buttons: values.optionButtons !== false,
+            links: values.optionLinks !== false,
+            selects: values.optionSelects !== false,
+            checkboxes: values.optionCheckboxes !== false,
+            radios: values.optionRadios !== false,
+            textareas: values.optionTextareas !== false,
+            tables: values.optionTables === true,
+            images: values.optionImages === true,
+            iframes: values.optionIframes === true,
+            errors: values.optionErrors === true,
+          };
+          break;
       }
 
       onUpdate(node.id, updatedData);
@@ -272,7 +336,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           <>
             {commonFields}
             <Form.Item name="selector" label="セレクタ" rules={[{ required: true }]}>
-              <Input placeholder="#button-id, .class-name, xpath=//button" />
+              <SelectorInput 
+                placeholder="#button-id, .class-name, xpath=//button"
+                savedSelectors={savedSelectors}
+                onReload={loadSavedSelectors}
+                loading={loadingSelectors}
+              />
             </Form.Item>
           </>
         );
@@ -283,7 +352,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           <>
             {commonFields}
             <Form.Item name="selector" label="セレクタ" rules={[{ required: true }]}>
-              <Input placeholder="#input-id, .class-name" />
+              <SelectorInput 
+                placeholder="#input-id, .class-name"
+                savedSelectors={savedSelectors}
+                onReload={loadSavedSelectors}
+                loading={loadingSelectors}
+              />
             </Form.Item>
             <Form.Item name="value" label="値" rules={[{ required: true }]}>
               <Input 
@@ -317,7 +391,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           <>
             {commonFields}
             <Form.Item name="selector" label="セレクタ" rules={[{ required: true }]}>
-              <Input placeholder="#checkbox-id" />
+              <SelectorInput 
+                placeholder="#checkbox-id"
+                savedSelectors={savedSelectors}
+                onReload={loadSavedSelectors}
+                loading={loadingSelectors}
+              />
             </Form.Item>
           </>
         );
@@ -337,7 +416,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           <>
             {commonFields}
             <Form.Item name="selector" label="セレクタ" rules={[{ required: true }]}>
-              <Input placeholder="#loader, .loading-spinner" />
+              <SelectorInput 
+                placeholder="#loader, .loading-spinner"
+                savedSelectors={savedSelectors}
+                onReload={loadSavedSelectors}
+                loading={loadingSelectors}
+              />
             </Form.Item>
             <Form.Item name="timeout" label="最大待機時間 (ms)">
               <InputNumber min={1000} max={30000} step={1000} placeholder="10000" />
@@ -350,7 +434,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           <>
             {commonFields}
             <Form.Item name="selector" label="セレクタ" rules={[{ required: true }]}>
-              <Input placeholder="#element-id, .class-name" />
+              <SelectorInput 
+                placeholder="#element-id, .class-name"
+                savedSelectors={savedSelectors}
+                onReload={loadSavedSelectors}
+                loading={loadingSelectors}
+              />
             </Form.Item>
             <Form.Item name="comparison" label="比較方法" rules={[{ required: true }]}>
               <Select>
@@ -870,6 +959,69 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
                 rows={8} 
                 placeholder="テストの説明、注意事項、TODOなどを記載" 
               />
+            </Form.Item>
+          </>
+        );
+
+      case 'discoverSelectors':
+        return (
+          <>
+            {commonFields}
+            <Form.Item 
+              name="category" 
+              label="カテゴリ" 
+              tooltip="セレクタのカテゴリ（フォルダ階層は/で区切る）"
+              rules={[{ required: true }]}
+              initialValue="default"
+            >
+              <Input placeholder="例: login, admin/settings, test/e2e" />
+            </Form.Item>
+            <Form.Item 
+              name="storageLabel" 
+              label="保存ラベル" 
+              tooltip="セレクタを保存する際の識別名（省略時はノードのラベルを使用）"
+            >
+              <Input placeholder="例: login-page, main-form" />
+            </Form.Item>
+            <Form.Item name="description" label="説明（オプション）">
+              <Input.TextArea rows={2} placeholder="このセレクタ探索の目的や注意事項" />
+            </Form.Item>
+            <Form.Item label="収集対象">
+              <Space direction="vertical">
+                <Form.Item name="optionInputs" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>入力フィールド</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionButtons" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>ボタン</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionLinks" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>リンク</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionSelects" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>セレクトボックス</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionCheckboxes" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>チェックボックス</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionRadios" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>ラジオボタン</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionTextareas" valuePropName="checked" noStyle>
+                  <Checkbox defaultChecked>テキストエリア</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionTables" valuePropName="checked" noStyle>
+                  <Checkbox>テーブル要素</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionImages" valuePropName="checked" noStyle>
+                  <Checkbox>画像</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionIframes" valuePropName="checked" noStyle>
+                  <Checkbox>iframe</Checkbox>
+                </Form.Item>
+                <Form.Item name="optionErrors" valuePropName="checked" noStyle>
+                  <Checkbox>エラー要素</Checkbox>
+                </Form.Item>
+              </Space>
             </Form.Item>
           </>
         );

@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import flowRoutes from './routes/flows';
 import templateRoutes from './routes/templates';
 import apiRoutes from './routes/api';
+import selectorsRoutes from './routes/selectors';
 import { TestRunner } from './services/testRunner';
 
 const app = express();
@@ -18,16 +19,21 @@ const io = new Server(httpServer, {
   },
 });
 
-const PORT = process.env.PORT || 3002;
-const HOST = process.env.HOST || '0.0.0.0';
-const FLOWS_DIR = path.join(process.cwd(), '../flows');
-const TEMPLATES_DIR = path.join(process.cwd(), '../templates');
+const PORT = process.env.SERVER_PORT || process.env.PORT || 3002;
+const HOST = process.env.SERVER_HOST || process.env.HOST || '0.0.0.0';
+const FLOWS_DIR = process.env.NODE_ENV === 'production'
+  ? path.resolve(process.cwd(), 'flows')
+  : path.resolve(process.cwd(), '../flows');
+const TEMPLATES_DIR = process.env.NODE_ENV === 'production'
+  ? path.resolve(process.cwd(), 'templates') 
+  : path.resolve(process.cwd(), '../templates');
 
 app.use(cors());
 app.use(express.json());
 
 app.use('/api/flows', flowRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/selectors', selectorsRoutes);
 app.use('/api', apiRoutes);
 
 // Serve templates directory

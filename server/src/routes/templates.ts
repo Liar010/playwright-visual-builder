@@ -3,7 +3,10 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const router = Router();
-const TEMPLATES_DIR = path.join(process.cwd(), '../templates');
+// プロジェクトルートからの相対パス
+const TEMPLATES_DIR = process.env.NODE_ENV === 'production' 
+  ? path.resolve(process.cwd(), 'templates')
+  : path.resolve(process.cwd(), '../templates');
 
 // テンプレート一覧を取得
 router.get('/', async (req, res) => {

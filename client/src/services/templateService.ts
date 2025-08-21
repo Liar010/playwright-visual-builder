@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { Template } from '../components/TemplateManager';
+import { API_ENDPOINTS } from '../config/api';
 
-const API_BASE = '/api/templates';
+const API_BASE = API_ENDPOINTS.templates;
 
 export const templateService = {
   // すべてのテンプレートを取得（ファイルベース）

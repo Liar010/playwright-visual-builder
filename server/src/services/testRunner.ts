@@ -8,6 +8,7 @@ import type {
   StepResult,
   NodeType,
   TestConfig,
+  TestNode,
 } from '@playwright-visual-builder/shared';
 
 export class TestRunner {
@@ -27,6 +28,7 @@ export class TestRunner {
   private retryDelay: number = 1000; // リトライ間の待機時間（ミリ秒）
   private executionOrder: string[] = []; // 実行順序を記録
   private variables: Map<string, any> = new Map(); // 変数ストレージ
+  private flowId: string | null = null; // フローのID
 
   constructor(socket?: Socket, config?: TestConfig) {
     this.socket = socket || null;
@@ -41,8 +43,9 @@ export class TestRunner {
     };
   }
 
-  async run(nodes: Node[], edges: Edge[]): Promise<TestResult & { screenshots?: any[] }> {
+  async run(nodes: Node[], edges: Edge[], flowId?: string): Promise<TestResult & { screenshots?: any[] }> {
     try {
+      this.flowId = flowId || 'default';
       await this.setup();
       
       // ノードマップとエッジマップを作成
@@ -1085,6 +1088,11 @@ export class TestRunner {
           console.log('Test flow completed.');
           break;
           
+        case 'discoverSelectors':
+          // セレクタ探索ノード
+          await this.executeDiscoverSelectors(node as any);
+          break;
+          
         default:
           throw new Error(`Unknown node type: ${type}`);
       }
@@ -1592,5 +1600,685 @@ export class TestRunner {
     if (this.socket) {
       this.socket.emit('screenshots-cleared');
     }
+  }
+
+  private async executeDiscoverSelectors(node: TestNode) {
+    try {
+      if (!this.page) throw new Error('Page not initialized');
+
+      const data = node.data;
+      const currentUrl = await this.page.url();
+      const category = data.category || 'default';
+      const storageLabel = data.storageLabel || node.id;
+      const options = data.options || { inputs: true, buttons: true, links: true };
+
+      console.log(`🔍 Discovering selectors at ${currentUrl} (category: ${category}, label: ${storageLabel})`);
+
+      // ページ上のセレクタを収集
+      const discoveredSelectors = await this.page.evaluate((opts) => {
+      const selectors: Record<string, string> = {};
+      const seenLabels = new Set<string>();
+
+      // ユニークなラベルを生成する関数
+      const makeUniqueLabel = (baseLabel: string, attributes: Record<string, string>): string => {
+        if (!seenLabels.has(baseLabel)) {
+          seenLabels.add(baseLabel);
+          return baseLabel;
+        }
+        
+        // 属性を追加して一意にする
+        for (const [key, value] of Object.entries(attributes)) {
+          const labelWithAttr = `${baseLabel}[${key}=${value}]`;
+          if (!seenLabels.has(labelWithAttr)) {
+            seenLabels.add(labelWithAttr);
+            return labelWithAttr;
+          }
+        }
+        
+        // それでも重複する場合は連番
+        let counter = 1;
+        let uniqueLabel = `${baseLabel}_${counter}`;
+        while (seenLabels.has(uniqueLabel)) {
+          counter++;
+          uniqueLabel = `${baseLabel}_${counter}`;
+        }
+        seenLabels.add(uniqueLabel);
+        return uniqueLabel;
+      };
+
+      // 入力フィールドを収集
+      if (opts.inputs) {
+        document.querySelectorAll('input:not([type="hidden"]), textarea, select').forEach((el) => {
+          const input = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+          const label = 
+            input.getAttribute('placeholder') ||
+            input.getAttribute('aria-label') ||
+            input.name ||
+            input.type ||
+            'input';
+          
+          const attributes = {
+            name: input.name || '',
+            type: input.getAttribute('type') || '',
+            id: input.id || ''
+          };
+          
+          const uniqueLabel = makeUniqueLabel(label, attributes);
+          
+          // セレクタの優先順位
+          let selector = '';
+          if (input.id) {
+            selector = `#${input.id}`;
+          } else if (input.name) {
+            selector = input.tagName.toLowerCase() === 'input' 
+              ? `input[name="${input.name}"]`
+              : `${input.tagName.toLowerCase()}[name="${input.name}"]`;
+          } else if (input.getAttribute('placeholder')) {
+            selector = `[placeholder="${input.getAttribute('placeholder')}"]`;
+          } else {
+            selector = input.className ? `.${input.className.split(' ')[0]}` : input.tagName.toLowerCase();
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // ボタンを収集
+      if (opts.buttons) {
+        // ボタンの位置情報を含むマップを作成
+        const buttonGroups = new Map<string, Array<{element: HTMLElement, index: number}>>();
+        
+        document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]').forEach((el, index) => {
+          const button = el as HTMLElement;
+          const label = 
+            button.textContent?.trim() ||
+            button.getAttribute('aria-label') ||
+            button.getAttribute('value') ||
+            'button';
+          
+          // 同じラベルのボタンをグループ化
+          if (!buttonGroups.has(label)) {
+            buttonGroups.set(label, []);
+          }
+          buttonGroups.get(label)!.push({element: button, index});
+        });
+        
+        // 各ボタンのセレクタを生成
+        buttonGroups.forEach((buttons, label) => {
+          buttons.forEach((btnInfo, groupIndex) => {
+            const button = btnInfo.element;
+            const attributes = {
+              type: button.getAttribute('type') || '',
+              id: button.id || '',
+              name: button.getAttribute('name') || '',
+              class: button.className || ''
+            };
+            
+            let uniqueLabel = label;
+            let selector = '';
+            
+            // セレクタの優先順位（より具体的なものを優先）
+            if (button.id) {
+              // IDがある場合は最優先
+              selector = `#${button.id}`;
+            } else if (button.getAttribute('name')) {
+              // name属性がある場合
+              const tagName = button.tagName.toLowerCase();
+              selector = `${tagName}[name="${button.getAttribute('name')}"]`;
+              if (buttons.length > 1) {
+                uniqueLabel = `${label}[name=${button.getAttribute('name')}]`;
+              }
+            } else if (button.getAttribute('onclick')) {
+              // onclick属性で識別（一部のみ使用）
+              const onclick = button.getAttribute('onclick') || '';
+              const funcMatch = onclick.match(/^(\w+)\(/);
+              if (funcMatch) {
+                uniqueLabel = `${label}[${funcMatch[1]}]`;
+                selector = button.className ? `.${button.className.split(' ')[0]}` : button.tagName.toLowerCase();
+              }
+            } else if (buttons.length === 1 && button.textContent?.trim()) {
+              // 同じテキストのボタンが1つだけの場合
+              // テキストを含むボタンを特定するXPath風のセレクタ
+              // ただし、Playwrightではtext=を使うのが推奨
+              selector = `text="${button.textContent.trim()}"`;
+            } else if (button.className) {
+              // クラス名での識別を改善
+              const classes = button.className.split(' ').filter(c => c && !c.startsWith('btn-'));
+              if (classes.length > 1) {
+                // 複数のクラスを組み合わせてより具体的に
+                selector = `.${classes.join('.')}`;
+              } else if (classes.length === 1) {
+                selector = `.${classes[0]}`;
+                // 同じクラスを持つボタンが複数ある場合は、インデックスを付与
+                if (buttons.length > 1 && groupIndex > 0) {
+                  uniqueLabel = `${label}[${groupIndex + 1}]`;
+                  // nth-childやnth-of-typeは使わず、PlaywrightのnthセレクタとしてUIで処理
+                }
+              } else {
+                selector = button.tagName.toLowerCase();
+              }
+            } else {
+              // 最後の手段：タグ名
+              selector = button.tagName.toLowerCase();
+              if (buttons.length > 1 && groupIndex > 0) {
+                uniqueLabel = `${label}[${groupIndex + 1}]`;
+              }
+            }
+            
+            // 属性情報を追加してユニークなラベルを作成
+            if (!uniqueLabel.includes('[')) {
+              const extraAttrs: string[] = [];
+              if (attributes.type && attributes.type !== 'button') {
+                extraAttrs.push(`type=${attributes.type}`);
+              }
+              if (attributes.id) {
+                extraAttrs.push(`id=${attributes.id}`);
+              }
+              if (extraAttrs.length > 0 && buttons.length > 1) {
+                uniqueLabel = `${uniqueLabel}[${extraAttrs[0]}]`;
+              }
+            }
+            
+            // 同じセレクタが既に存在する場合の処理
+            const existingLabel = Object.keys(selectors).find(k => selectors[k] === selector);
+            if (existingLabel && existingLabel !== uniqueLabel) {
+              // より具体的なセレクタを生成
+              if (button.parentElement && button.parentElement.id) {
+                selector = `#${button.parentElement.id} ${selector}`;
+              } else if (button.closest('form') && (button.closest('form') as HTMLFormElement).id) {
+                selector = `#${(button.closest('form') as HTMLFormElement).id} ${selector}`;
+              }
+            }
+            
+            selectors[uniqueLabel] = selector;
+          });
+        });
+      }
+
+      // リンクを収集
+      if (opts.links) {
+        // 通常のリンクとli内のリンクを分けて収集
+        const linkGroups = new Map<string, Array<{element: HTMLAnchorElement, context: string}>>();
+        
+        // href属性がある、またはdata-href属性がある、またはIDがあるa要素を収集
+        document.querySelectorAll('a[href], a[data-href], a[id]').forEach((el) => {
+          const link = el as HTMLAnchorElement;
+          const label = 
+            link.textContent?.trim() ||
+            link.getAttribute('aria-label') ||
+            'link';
+          
+          // li内のリンクかどうかチェック
+          const isInListItem = link.closest('li') !== null;
+          const context = isInListItem ? 'li' : 'general';
+          
+          const groupKey = `${label}::${context}`;
+          if (!linkGroups.has(groupKey)) {
+            linkGroups.set(groupKey, []);
+          }
+          linkGroups.get(groupKey)!.push({element: link, context});
+        });
+        
+        // 各リンクのセレクタを生成
+        linkGroups.forEach((links, groupKey) => {
+          const [baseLabel, context] = groupKey.split('::');
+          
+          links.forEach((linkInfo, index) => {
+            const link = linkInfo.element;
+            let label = baseLabel;
+            let selector = '';
+            
+            // li内のリンクの場合、ラベルにプレフィックスを追加
+            if (linkInfo.context === 'li') {
+              label = `[リスト] ${baseLabel}`;
+            }
+            
+            const attributes = {
+              href: link.getAttribute('href') || '',
+              dataHref: link.getAttribute('data-href') || '',
+              id: link.id || '',
+              class: link.className.split(' ')[0] || ''
+            };
+            
+            // セレクタの優先順位（li内の場合は特別な処理）
+            if (link.id) {
+              selector = `#${link.id}`;
+            } else if (linkInfo.context === 'li') {
+              // li内のリンクの場合、より具体的なセレクタを生成
+              const listItem = link.closest('li');
+              if (listItem) {
+                // リストアイテムにIDがある場合
+                if (listItem.id) {
+                  selector = `#${listItem.id} a`;
+                }
+                // 親のul/olにIDがある場合
+                else if (listItem.parentElement?.id) {
+                  const parentId = listItem.parentElement.id;
+                  // 何番目のliかを特定
+                  const listItems = Array.from(listItem.parentElement.children);
+                  const itemIndex = listItems.indexOf(listItem);
+                  if (itemIndex >= 0) {
+                    selector = `#${parentId} li:nth-child(${itemIndex + 1}) a`;
+                  }
+                }
+                // ナビゲーションメニューの場合（nav要素内）
+                else if (link.closest('nav')) {
+                  const nav = link.closest('nav');
+                  if (nav && nav.id) {
+                    selector = `#${nav.id} li a:text("${link.textContent?.trim()}")`;
+                  } else if (nav && nav.className) {
+                    selector = `.${nav.className.split(' ')[0]} li a:text("${link.textContent?.trim()}")`;
+                  } else {
+                    // テキストでの識別
+                    selector = `li a:text("${link.textContent?.trim()}")`;
+                  }
+                }
+                // その他の場合はテキストで識別
+                else if (link.textContent?.trim()) {
+                  selector = `li a:text("${link.textContent.trim()}")`;
+                }
+                // data-href属性で識別
+                else if (link.getAttribute('data-href')) {
+                  selector = `li a[data-href="${link.getAttribute('data-href')}"]`;
+                }
+                // href属性で識別
+                else if (link.href) {
+                  selector = `li a[href="${link.getAttribute('href')}"]`;
+                }
+                else {
+                  selector = 'li a';
+                }
+              }
+            } else if (link.getAttribute('data-href')) {
+              // data-href属性がある場合
+              selector = `a[data-href="${link.getAttribute('data-href')}"]`;
+            } else if (link.href) {
+              selector = `a[href="${link.getAttribute('href')}"]`;
+            } else if (link.textContent?.trim()) {
+              selector = `a:text("${link.textContent.trim()}")`;
+            } else if (link.className) {
+              selector = `a.${link.className.split(' ')[0]}`;
+            } else {
+              selector = 'a';
+            }
+            
+            // 同じラベルが既に存在する場合は番号を付与
+            if (selectors[label]) {
+              let counter = 2;
+              let uniqueLabel = `${label}_${counter}`;
+              while (selectors[uniqueLabel]) {
+                counter++;
+                uniqueLabel = `${label}_${counter}`;
+              }
+              label = uniqueLabel;
+            }
+            
+            selectors[label] = selector;
+          });
+        });
+      }
+
+      // セレクトボックスを収集
+      if (opts.selects !== false) {
+        document.querySelectorAll('select').forEach((el) => {
+          const select = el as HTMLSelectElement;
+          const label = 
+            select.getAttribute('aria-label') ||
+            select.name ||
+            'select';
+          
+          const uniqueLabel = makeUniqueLabel(label, {
+            id: select.id,
+            name: select.name
+          });
+          
+          let selector = '';
+          if (select.id) {
+            selector = `#${select.id}`;
+          } else if (select.name) {
+            selector = `select[name="${select.name}"]`;
+          } else if (select.className) {
+            selector = `select.${select.className.split(' ').join('.')}`;
+          } else {
+            selector = 'select';
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // チェックボックスを収集
+      if (opts.checkboxes !== false) {
+        document.querySelectorAll('input[type="checkbox"]').forEach((el) => {
+          const checkbox = el as HTMLInputElement;
+          const label = 
+            checkbox.getAttribute('aria-label') ||
+            checkbox.name ||
+            checkbox.id ||
+            'checkbox';
+          
+          const uniqueLabel = makeUniqueLabel(label, {
+            id: checkbox.id,
+            name: checkbox.name,
+            value: checkbox.value
+          });
+          
+          let selector = '';
+          if (checkbox.id) {
+            selector = `#${checkbox.id}`;
+          } else if (checkbox.name && checkbox.value) {
+            selector = `input[type="checkbox"][name="${checkbox.name}"][value="${checkbox.value}"]`;
+          } else if (checkbox.name) {
+            selector = `input[type="checkbox"][name="${checkbox.name}"]`;
+          } else {
+            selector = 'input[type="checkbox"]';
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // ラジオボタンを収集
+      if (opts.radios !== false) {
+        document.querySelectorAll('input[type="radio"]').forEach((el) => {
+          const radio = el as HTMLInputElement;
+          const label = 
+            radio.getAttribute('aria-label') ||
+            radio.value ||
+            radio.id ||
+            'radio';
+          
+          const uniqueLabel = makeUniqueLabel(label, {
+            name: radio.name,
+            value: radio.value
+          });
+          
+          let selector = '';
+          if (radio.id) {
+            selector = `#${radio.id}`;
+          } else if (radio.name && radio.value) {
+            selector = `input[type="radio"][name="${radio.name}"][value="${radio.value}"]`;
+          } else if (radio.name) {
+            selector = `input[type="radio"][name="${radio.name}"]`;
+          } else {
+            selector = 'input[type="radio"]';
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // テキストエリアを収集
+      if (opts.textareas !== false) {
+        document.querySelectorAll('textarea').forEach((el) => {
+          const textarea = el as HTMLTextAreaElement;
+          const label = 
+            textarea.getAttribute('aria-label') ||
+            textarea.name ||
+            textarea.getAttribute('placeholder') ||
+            'textarea';
+          
+          const uniqueLabel = makeUniqueLabel(label, {
+            id: textarea.id,
+            name: textarea.name
+          });
+          
+          let selector = '';
+          if (textarea.id) {
+            selector = `#${textarea.id}`;
+          } else if (textarea.name) {
+            selector = `textarea[name="${textarea.name}"]`;
+          } else if (textarea.getAttribute('placeholder')) {
+            selector = `textarea[placeholder="${textarea.getAttribute('placeholder')}"]`;
+          } else {
+            selector = 'textarea';
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // テーブル要素を収集（行やセルの識別）
+      if (opts.tables === true) {
+        // テーブルヘッダー
+        document.querySelectorAll('table').forEach((table, tableIndex) => {
+          const tableId = table.id || `table-${tableIndex}`;
+          
+          // ヘッダー行
+          table.querySelectorAll('thead th, thead td').forEach((th, index) => {
+            const headerText = (th as HTMLElement).textContent?.trim() || `header-${index}`;
+            const uniqueLabel = `${tableId}-header-${headerText}`;
+            
+            let selector = '';
+            if (table.id) {
+              selector = `#${table.id} thead th:nth-child(${index + 1})`;
+            } else {
+              selector = `table:nth-of-type(${tableIndex + 1}) thead th:nth-child(${index + 1})`;
+            }
+            
+            selectors[uniqueLabel] = selector;
+          });
+          
+          // データ行（最初の数行のみ）
+          table.querySelectorAll('tbody tr').forEach((tr, rowIndex) => {
+            if (rowIndex < 3) { // 最初の3行のみ
+              const rowId = (tr as HTMLElement).id || `row-${rowIndex}`;
+              const uniqueLabel = `${tableId}-${rowId}`;
+              
+              let selector = '';
+              if ((tr as HTMLElement).id) {
+                selector = `#${(tr as HTMLElement).id}`;
+              } else if (table.id) {
+                selector = `#${table.id} tbody tr:nth-child(${rowIndex + 1})`;
+              } else {
+                selector = `table:nth-of-type(${tableIndex + 1}) tbody tr:nth-child(${rowIndex + 1})`;
+              }
+              
+              selectors[uniqueLabel] = selector;
+            }
+          });
+        });
+      }
+
+      // 画像を収集
+      if (opts.images === true) {
+        document.querySelectorAll('img').forEach((img, index) => {
+          const label = 
+            img.alt ||
+            img.title ||
+            img.getAttribute('aria-label') ||
+            `image-${index}`;
+          
+          const uniqueLabel = makeUniqueLabel(label, {
+            id: img.id,
+            src: img.src.split('/').pop() || ''
+          });
+          
+          let selector = '';
+          if (img.id) {
+            selector = `#${img.id}`;
+          } else if (img.alt) {
+            selector = `img[alt="${img.alt}"]`;
+          } else if (img.src) {
+            const srcPart = img.src.split('/').pop();
+            selector = `img[src*="${srcPart}"]`;
+          } else {
+            selector = `img:nth-of-type(${index + 1})`;
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // iframeを収集
+      if (opts.iframes === true) {
+        document.querySelectorAll('iframe').forEach((iframe, index) => {
+          const label = 
+            iframe.title ||
+            iframe.name ||
+            iframe.id ||
+            `iframe-${index}`;
+          
+          const uniqueLabel = makeUniqueLabel(label, {
+            id: iframe.id,
+            name: iframe.name
+          });
+          
+          let selector = '';
+          if (iframe.id) {
+            selector = `#${iframe.id}`;
+          } else if (iframe.name) {
+            selector = `iframe[name="${iframe.name}"]`;
+          } else if (iframe.title) {
+            selector = `iframe[title="${iframe.title}"]`;
+          } else {
+            selector = `iframe:nth-of-type(${index + 1})`;
+          }
+          
+          selectors[uniqueLabel] = selector;
+        });
+      }
+
+      // エラー要素を収集（一般的なエラークラス）
+      if (opts.errors === true) {
+        const errorSelectors = [
+          '.error', '.alert-danger', '.alert-error', '.has-error',
+          '.invalid', '.validation-error', '[role="alert"]',
+          '.message-error', '.form-error', '.field-error'
+        ];
+        
+        errorSelectors.forEach(errorSelector => {
+          document.querySelectorAll(errorSelector).forEach((el, index) => {
+            const errorText = (el as HTMLElement).textContent?.trim()?.substring(0, 30) || 'error';
+            const uniqueLabel = `error-${errorText}-${index}`;
+            
+            let selector = '';
+            if ((el as HTMLElement).id) {
+              selector = `#${(el as HTMLElement).id}`;
+            } else {
+              selector = errorSelector;
+              if (index > 0) {
+                // 複数ある場合はインデックスを追加
+                selectors[`${uniqueLabel}[${index + 1}]`] = `${errorSelector}:nth-of-type(${index + 1})`;
+              } else {
+                selectors[uniqueLabel] = selector;
+              }
+            }
+          });
+        });
+        
+        // ローダー/スピナー要素
+        const loaderSelectors = [
+          '.loader', '.spinner', '.loading', '.progress',
+          '[role="progressbar"]', '.spinner-border', '.spinner-grow'
+        ];
+        
+        loaderSelectors.forEach(loaderSelector => {
+          const elements = document.querySelectorAll(loaderSelector);
+          if (elements.length > 0) {
+            const el = elements[0];
+            const uniqueLabel = `loader-${loaderSelector.replace('.', '')}`;
+            
+            if ((el as HTMLElement).id) {
+              selectors[uniqueLabel] = `#${(el as HTMLElement).id}`;
+            } else {
+              selectors[uniqueLabel] = loaderSelector;
+            }
+          }
+        });
+      }
+
+      return selectors;
+      }, options);
+
+      // セレクタをファイルに保存（カテゴリも含める）
+      await this.saveDiscoveredSelectors(this.flowId || 'default', category, storageLabel, discoveredSelectors, currentUrl);
+
+      const count = Object.keys(discoveredSelectors).length;
+      console.log(`✅ Discovered ${count} selectors and saved with label: ${storageLabel} in category: ${category}`);
+      
+      // UIに通知
+      if (this.socket) {
+        this.socket.emit('selectors:discovered', {
+          nodeId: node.id,
+          label: storageLabel,
+          url: currentUrl,
+          count,
+          selectors: discoveredSelectors
+        });
+      }
+    } catch (error) {
+      console.error('Error in executeDiscoverSelectors:', error);
+      throw error;
+    }
+  }
+
+  private async saveDiscoveredSelectors(
+    flowId: string,
+    category: string,
+    label: string, 
+    selectors: Record<string, string>,
+    url: string
+  ) {
+    // fs/promisesとpathは既にインポート済み
+    
+    // フローごとのディレクトリを作成
+    const baseDir = process.env.NODE_ENV === 'production' 
+      ? path.resolve(process.cwd(), 'flows')
+      : path.resolve(process.cwd(), '../flows');
+    const flowDir = path.join(baseDir, flowId);
+    await fs.mkdir(flowDir, { recursive: true });
+    
+    const selectorsFile = path.join(flowDir, 'selectors.json');
+    
+    let existingData: any = {};
+    try {
+      const content = await fs.readFile(selectorsFile, 'utf-8');
+      existingData = JSON.parse(content);
+    } catch (error) {
+      // ファイルが存在しない場合は新規作成
+      existingData = {
+        flowId,
+        selectors: {}
+      };
+    }
+    
+    // 新形式（v2.0）への移行
+    if (!existingData.version || existingData.version !== '2.0') {
+      // 旧形式のデータを新形式に変換
+      const oldSelectors = existingData.selectors || {};
+      existingData = {
+        version: '2.0',
+        flowId: existingData.flowId || flowId,
+        categories: {
+          default: oldSelectors
+        }
+      };
+      console.log('Migrated selectors to v2.0 format');
+    }
+    
+    // カテゴリ構造を初期化
+    if (!existingData.categories) {
+      existingData.categories = {};
+    }
+    
+    // カテゴリが存在しない場合は作成
+    if (!existingData.categories[category]) {
+      existingData.categories[category] = {};
+    }
+    
+    // セレクタを更新（カテゴリ内に保存）
+    existingData.categories[category][label] = {
+      url,
+      lastUpdated: new Date().toISOString(),
+      selectors
+    };
+    
+    console.log(`Saved selectors to category: "${category}", label: "${label}"`);
+    console.log(`Total categories: ${Object.keys(existingData.categories).length}`);
+    console.log(`Categories: ${Object.keys(existingData.categories).join(', ')}`);
+    
+    // ファイルに保存
+    await fs.writeFile(selectorsFile, JSON.stringify(existingData, null, 2));
   }
 }

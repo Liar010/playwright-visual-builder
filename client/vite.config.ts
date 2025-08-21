@@ -6,21 +6,25 @@ export default defineConfig({
   plugins: [react()],
   publicDir: 'public',
   server: {
-    host: '0.0.0.0',
-    port: 5173,
+    host: process.env.CLIENT_HOST || '0.0.0.0',
+    port: parseInt(process.env.CLIENT_PORT || '5173'),
     proxy: {
       '/api': {
-        target: 'http://localhost:3002',
+        target: process.env.VITE_API_URL || 'http://localhost:3002',
         changeOrigin: true
       },
       '/socket.io': {
-        target: 'http://localhost:3002',
+        target: process.env.VITE_API_URL || 'http://localhost:3002',
         ws: true
       },
       '/templates': {
-        target: 'http://localhost:3002',
+        target: process.env.VITE_API_URL || 'http://localhost:3002',
         changeOrigin: true
       }
     }
+  },
+  preview: {
+    host: process.env.CLIENT_HOST || '0.0.0.0',
+    port: parseInt(process.env.CLIENT_PORT || '5173')
   }
 })

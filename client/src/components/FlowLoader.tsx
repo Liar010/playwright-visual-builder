@@ -7,6 +7,7 @@ import {
   CodeOutlined 
 } from '@ant-design/icons';
 import type { TestFlow } from '@playwright-visual-builder/shared';
+import { API_ENDPOINTS } from '../config/api';
 
 interface FlowLoaderProps {
   isOpen: boolean;
@@ -21,9 +22,7 @@ export default function FlowLoader({ isOpen, onClose, onLoad }: FlowLoaderProps)
   const fetchFlows = async () => {
     setLoading(true);
     try {
-      const apiUrl = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-        ? `http://${window.location.hostname}:3002/api/flows`
-        : '/api/flows';
+      const apiUrl = API_ENDPOINTS.flows;
       
       const response = await fetch(apiUrl);
       if (response.ok) {
@@ -42,9 +41,7 @@ export default function FlowLoader({ isOpen, onClose, onLoad }: FlowLoaderProps)
   const handleDelete = async (flowId: string, event?: React.MouseEvent) => {
     event?.stopPropagation();
     try {
-      const apiUrl = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-        ? `http://${window.location.hostname}:3002/api/flows/${flowId}`
-        : `/api/flows/${flowId}`;
+      const apiUrl = `${API_ENDPOINTS.flows}/${flowId}`;
       
       const response = await fetch(apiUrl, { method: 'DELETE' });
       if (response.ok) {

@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import { io, Socket } from 'socket.io-client';
 import type { TestResult, StepResult, TestConfig } from '@playwright-visual-builder/shared';
+import { getApiUrl } from '../config/api';
 
 const { Text } = Typography;
 
@@ -36,7 +37,7 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
   const [socket, setSocket] = useState<Socket | null>(null);
   const [debugScreenshot, setDebugScreenshot] = useState<string | null>(null);
   const [showDebugView, setShowDebugView] = useState(false);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  // const [logs, setLogs] = useState<LogEntry[]>([]);  // ログ機能はScreenshotGalleryに移動
   const [executionOrder, setExecutionOrder] = useState<Array<{
     nodeId: string;
     order: number;
@@ -46,9 +47,8 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
   }>>([]);
 
   useEffect(() => {
-    const socketUrl = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-      ? `http://${window.location.hostname}:3002`
-      : undefined;
+    const apiUrl = getApiUrl();
+    const socketUrl = apiUrl || undefined;
     
     const newSocket = io(socketUrl || '/', {
       transports: ['websocket', 'polling'],
@@ -86,7 +86,7 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
       
       // デバッグログの受信
       newSocket.on('test:log', (logEntry: LogEntry) => {
-        setLogs(prev => [...prev, logEntry].slice(-100)); // 最新100件のログを保持
+        // setLogs(prev => [...prev, logEntry].slice(-100)); // 最新100件のログを保持 - ログ機能はScreenshotGalleryに移動
         // 親コンポーネントにもログを渡す
         if (onLog) {
           onLog(logEntry);
