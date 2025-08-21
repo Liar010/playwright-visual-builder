@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Modal, Table, Button, Space, Typography, Tag, Popconfirm, Input, message, Card, Empty, Tooltip, Tree, TreeDataNode } from 'antd';
-import { DeleteOutlined, EditOutlined, ReloadOutlined, SearchOutlined, FolderOutlined, FileOutlined } from '@ant-design/icons';
+import { Modal, Table, Button, Space, Typography, Tag, Popconfirm, Input, message, Card, Empty, Tooltip, Tree, TreeDataNode, Upload, Select, List, Alert } from 'antd';
+import { DeleteOutlined, EditOutlined, ReloadOutlined, SearchOutlined, FolderOutlined, FileOutlined, ExportOutlined, ImportOutlined, HistoryOutlined } from '@ant-design/icons';
 import { 
   selectorService, 
   SavedSelectors, 
@@ -24,10 +24,15 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
   const [searchText, setSearchText] = useState('');
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [exportCategory, setExportCategory] = useState<string>('all');
+  const [backups, setBackups] = useState<Array<{ timestamp: string; date: string; displayDate: string }>>([]);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       loadSelectors();
+      loadBackups();
     }
   }, [isOpen]);
 
@@ -40,6 +45,15 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
       message.error('セレクタの読み込みに失敗しました');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadBackups = async () => {
+    try {
+      const data = await selectorService.getBackups();
+      setBackups(data);
+    } catch (error) {
+      console.error('Failed to load backups:', error);
     }
   };
 
@@ -137,6 +151,71 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
     if (onSelectorSelect) {
       onSelectorSelect(selector);
       onClose();
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const blob = exportCategory === 'all' 
+        ? await selectorService.exportAll()
+        : await selectorService.exportCategory(exportCategory);
+      
+      // ダウンロード処理
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = exportCategory === 'all' 
+        ? `selectors_export_${timestamp}.json`
+        : `selectors_${exportCategory}_${timestamp}.json`;
+      
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      message.success('セレクタをエクスポートしました');
+    } catch (error) {
+      message.error('エクスポートに失敗しました');
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      const result = await selectorService.import(data);
+      
+      if (result.success) {
+        message.success(
+          `インポート完了: ${result.stats.added}件追加、${result.stats.skipped}件スキップ\n` +
+          `バックアップ: ${result.backupTimestamp}`
+        );
+        loadSelectors();
+        loadBackups();
+      }
+    } catch (error) {
+      message.error('インポートに失敗しました。ファイル形式を確認してください。');
+    } finally {
+      setImporting(false);
+    }
+    
+    return false; // Prevent default upload behavior
+  };
+
+  const handleRestore = async (timestamp: string) => {
+    try {
+      const result = await selectorService.restoreFromBackup(timestamp);
+      if (result.success) {
+        message.success(`バックアップ（${timestamp}）から復元しました`);
+        loadSelectors();
+        loadBackups();
+      }
+    } catch (error) {
+      message.error('復元に失敗しました');
     }
   };
 
@@ -300,6 +379,9 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
   
   const treeData = buildCategoryTree();
   
+  // カテゴリリストを取得
+  const categories = Array.from(getSelectorsByCategory(selectors).keys());
+  
   // 選択されたカテゴリ/ラベルのデータを取得
   const getSelectedData = (): { category: string; label: string; data: SelectorData } | null => {
     if (!selectedCategory) return null;
@@ -332,6 +414,13 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
             loading={loading}
             size="small"
           />
+          <Button
+            icon={showImportExport ? <FolderOutlined /> : <ImportOutlined />}
+            onClick={() => setShowImportExport(!showImportExport)}
+            size="small"
+          >
+            {showImportExport ? '管理画面' : 'インポート/エクスポート'}
+          </Button>
         </Space>
       }
       open={isOpen}
@@ -339,17 +428,104 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
       width={900}
       footer={null}
     >
-      <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        <Search
-          placeholder="セレクタを検索..."
-          allowClear
-          enterButton={<SearchOutlined />}
-          size="middle"
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
-        
-        {Object.keys(selectors).length === 0 ? (
+      {showImportExport ? (
+        <Space direction="vertical" style={{ width: '100%' }} size="large">
+          <Alert
+            message="セレクタのインポート/エクスポート"
+            description="セレクタをエクスポートしてバックアップを作成したり、他の環境からインポートしたりできます。インポートは安全モードで動作し、既存のセレクタは上書きされません。"
+            type="info"
+            showIcon
+          />
+          
+          <Card title="エクスポート" size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Space>
+                <span>エクスポート範囲:</span>
+                <Select
+                  value={exportCategory}
+                  onChange={setExportCategory}
+                  style={{ width: 200 }}
+                >
+                  <Select.Option value="all">すべてのセレクタ</Select.Option>
+                  {categories.map(cat => (
+                    <Select.Option key={cat} value={cat}>
+                      カテゴリ: {cat}
+                    </Select.Option>
+                  ))}
+                </Select>
+                <Button
+                  type="primary"
+                  icon={<ExportOutlined />}
+                  onClick={handleExport}
+                >
+                  エクスポート
+                </Button>
+              </Space>
+            </Space>
+          </Card>
+          
+          <Card title="インポート（安全モード）" size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Upload
+                accept=".json"
+                beforeUpload={handleImport}
+                showUploadList={false}
+                disabled={importing}
+              >
+                <Button
+                  icon={<ImportOutlined />}
+                  loading={importing}
+                >
+                  JSONファイルを選択してインポート
+                </Button>
+              </Upload>
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                ※ 既存のセレクタは上書きされません。新しいセレクタのみが追加されます。
+              </Text>
+            </Space>
+          </Card>
+          
+          <Card title="バックアップから復元" size="small">
+            {backups.length > 0 ? (
+              <List
+                size="small"
+                dataSource={backups.slice(0, 5)}
+                renderItem={backup => (
+                  <List.Item
+                    actions={[
+                      <Button
+                        size="small"
+                        icon={<HistoryOutlined />}
+                        onClick={() => handleRestore(backup.timestamp)}
+                      >
+                        復元
+                      </Button>
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={backup.displayDate}
+                      description={`タイムスタンプ: ${backup.timestamp}`}
+                    />
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <Empty description="バックアップがありません" />
+            )}
+          </Card>
+        </Space>
+      ) : (
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <Search
+            placeholder="セレクタを検索..."
+            allowClear
+            enterButton={<SearchOutlined />}
+            size="middle"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          
+          {Object.keys(selectors).length === 0 ? (
           <Empty 
             description="保存されたセレクタがありません"
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -417,8 +593,9 @@ export default function SelectorManager({ isOpen, onClose, onSelectorSelect }: S
               )}
             </div>
           </div>
-        )}
-      </Space>
+          )}
+        </Space>
+      )}
       
       <style>{`
         .selector-text {

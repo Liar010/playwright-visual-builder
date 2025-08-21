@@ -159,5 +159,67 @@ export const selectorService = {
       console.error('Failed to delete selector:', error);
       throw error;
     }
+  },
+
+  // エクスポート（全セレクタ）
+  async exportAll(): Promise<Blob> {
+    try {
+      const response = await axios.get(`${API_BASE}/export/all`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to export selectors:', error);
+      throw error;
+    }
+  },
+
+  // エクスポート（カテゴリ別）
+  async exportCategory(category: string): Promise<Blob> {
+    try {
+      const response = await axios.get(`${API_BASE}/export/category/${encodeURIComponent(category)}`, {
+        responseType: 'blob'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to export category selectors:', error);
+      throw error;
+    }
+  },
+
+  // インポート（安全モードのみ）
+  async import(data: any): Promise<{ success: boolean; backupTimestamp: string; stats: { added: number; skipped: number } }> {
+    try {
+      const response = await axios.post(`${API_BASE}/import`, {
+        data,
+        mode: 'safe'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to import selectors:', error);
+      throw error;
+    }
+  },
+
+  // バックアップ一覧を取得
+  async getBackups(): Promise<Array<{ timestamp: string; date: string; displayDate: string }>> {
+    try {
+      const response = await axios.get(`${API_BASE}/backups`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get backups:', error);
+      return [];
+    }
+  },
+
+  // バックアップから復元
+  async restoreFromBackup(timestamp: string): Promise<{ success: boolean; restoredFrom: string; newBackupTimestamp: string }> {
+    try {
+      const response = await axios.post(`${API_BASE}/restore/${timestamp}`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to restore from backup:', error);
+      throw error;
+    }
   }
 };
