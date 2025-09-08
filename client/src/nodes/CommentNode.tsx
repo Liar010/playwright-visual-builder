@@ -24,7 +24,7 @@ const CommentNode = memo(({ data, selected }: NodeProps) => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
           <EditOutlined style={{ color: '#faad14' }} />
-          <Text strong style={{ color: '#d48806' }}>コメント</Text>
+          <Text strong style={{ color: '#d48806' }}>{data.label || 'コメント'}</Text>
         </div>
         <Text style={{ 
           display: 'block',
