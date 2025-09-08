@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Checkbox, Button, Space, message, Divider } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import { Node, Edge } from 'reactflow';
-import type { TestConfig } from '@playwright-visual-builder/shared';
+import type { TestConfig, TestVariable } from '@playwright-visual-builder/shared';
 import { exportFlow, downloadFile, ExportFormat } from '../utils/exportFlow';
 
 interface ExportFlowDialogProps {
@@ -10,6 +10,7 @@ interface ExportFlowDialogProps {
   onClose: () => void;
   nodes: Node[];
   edges: Edge[];
+  variables?: TestVariable[];
   config: TestConfig;
 }
 
@@ -18,6 +19,7 @@ const ExportFlowDialog: React.FC<ExportFlowDialogProps> = ({
   onClose,
   nodes,
   edges,
+  variables,
   config,
 }) => {
   const [selectedFormats, setSelectedFormats] = useState<Set<ExportFormat>>(new Set(['json']));
@@ -51,7 +53,7 @@ const ExportFlowDialog: React.FC<ExportFlowDialogProps> = ({
 
       selectedFormats.forEach(format => {
         try {
-          const content = exportFlow(nodes, edges, config, {
+          const content = exportFlow(nodes, edges, variables, config, {
             format,
             includeConfig,
             prettyPrint,

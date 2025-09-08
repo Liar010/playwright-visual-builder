@@ -78,6 +78,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
         values.comment = node.data.comment;
       }
       
+      // 終了ノードの値設定
+      if (node.type === 'exit') {
+        values.exitMessage = node.data.action?.message;
+        values.exitCode = node.data.action?.exitCode ?? 1;
+      }
+      
       form.setFieldsValue(values);
     }
   }, [node, form]);
@@ -297,6 +303,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
           break;
         case 'comment':
           updatedData.comment = values.comment || '';
+          break;
+        case 'exit':
+          updatedData.action = {
+            message: values.exitMessage || '',
+            exitCode: values.exitCode ?? 1,
+          };
           break;
         case 'discoverSelectors':
           updatedData.category = values.category || 'default';
@@ -570,12 +582,38 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
                   );
                 } else if (conditionType === 'custom') {
                   return (
-                    <Form.Item name="conditionExpression" label="JavaScript式" rules={[{ required: true }]}>
-                      <Input.TextArea 
-                        placeholder="例: document.title === 'Success' または document.querySelector('.status').textContent === 'Complete'" 
-                        rows={3} 
-                      />
-                    </Form.Item>
+                    <>
+                      <Form.Item 
+                        name="conditionExpression" 
+                        label="JavaScript式" 
+                        rules={[{ required: true }]}
+                        help={
+                          <div style={{ marginTop: 8 }}>
+                            <div>変数は ${'{'} 変数名 {'}'} または {'{{'} 変数名 {'}}'} 形式で参照できます</div>
+                            {variables.length > 0 && (
+                              <div style={{ marginTop: 4, color: '#1890ff' }}>
+                                <strong>利用可能な変数:</strong> {variables.map(v => `${'${'}${v.name}${'}'}`).join(', ')}
+                              </div>
+                            )}
+                            {variables.length === 0 && (
+                              <div style={{ marginTop: 4, color: '#999' }}>
+                                ※ 変数パネルで変数を作成すると、ここに表示されます
+                              </div>
+                            )}
+                          </div>
+                        }
+                      >
+                        <Input.TextArea 
+                          placeholder={`例: 
+• document.title === 'Success'
+• \${count} > 10
+• \${text}.includes('完了')
+• parseInt(\${price}) < 1000`} 
+                          rows={4} 
+                          style={{ fontFamily: 'monospace' }}
+                        />
+                      </Form.Item>
+                    </>
                   );
                 }
                 
@@ -986,6 +1024,34 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
               <Input.TextArea 
                 rows={8} 
                 placeholder="テストの説明、注意事項、TODOなどを記載" 
+              />
+            </Form.Item>
+          </>
+        );
+
+      case 'exit':
+        return (
+          <>
+            {commonFields}
+            <Form.Item
+              name="exitMessage"
+              label="終了メッセージ"
+              help="テスト終了時に表示されるメッセージです。終了理由を明確に記載してください。"
+            >
+              <Input.TextArea 
+                rows={3} 
+                placeholder="例: ログインに失敗しました。認証情報を確認してください。"
+              />
+            </Form.Item>
+            <Form.Item
+              name="exitCode"
+              label="終了コード"
+              help="0: 正常終了, 1以上: エラー終了"
+            >
+              <InputNumber 
+                min={0} 
+                max={255}
+                style={{ width: '100%' }}
               />
             </Form.Item>
           </>

@@ -3,7 +3,7 @@ import { Modal, Upload, Button, message, Alert, Space } from 'antd';
 import { InboxOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { Node, Edge } from 'reactflow';
-import type { TestConfig } from '@playwright-visual-builder/shared';
+import type { TestConfig, TestVariable } from '@playwright-visual-builder/shared';
 import { importFlow, readFile, guessFormat, ImportResult } from '../utils/importFlow';
 
 const { Dragger } = Upload;
@@ -11,7 +11,7 @@ const { Dragger } = Upload;
 interface ImportFlowDialogProps {
   open: boolean;
   onClose: () => void;
-  onImport: (nodes: Node[], edges: Edge[], config?: TestConfig) => void;
+  onImport: (nodes: Node[], edges: Edge[], variables?: TestVariable[], config?: TestConfig) => void;
 }
 
 const ImportFlowDialog: React.FC<ImportFlowDialogProps> = ({
@@ -47,7 +47,7 @@ const ImportFlowDialog: React.FC<ImportFlowDialogProps> = ({
 
   const handleConfirmImport = () => {
     if (importResult) {
-      onImport(importResult.nodes, importResult.edges, importResult.config);
+      onImport(importResult.nodes, importResult.edges, importResult.variables, importResult.config);
       message.success('フローをインポートしました');
       handleClose();
     }

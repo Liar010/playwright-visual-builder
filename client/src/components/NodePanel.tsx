@@ -26,7 +26,8 @@ import {
   SwitcherOutlined,
   DatabaseOutlined,
   CodeOutlined,
-  SearchOutlined
+  SearchOutlined,
+  StopOutlined
 } from '@ant-design/icons';
 import type { NodeType } from '@playwright-visual-builder/shared';
 
@@ -352,6 +353,16 @@ const nodeTemplates = [
     defaultData: {
       label: 'Loop',
       loop: { type: 'count', count: 3 },
+    },
+    category: 'advanced',
+  },
+  {
+    type: 'exit' as NodeType,
+    label: '終了',
+    icon: <StopOutlined />,
+    defaultData: {
+      label: '終了',
+      action: { message: '', exitCode: 1 },
     },
     category: 'advanced',
   },

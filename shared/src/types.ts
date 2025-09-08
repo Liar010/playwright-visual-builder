@@ -2,6 +2,7 @@ export type NodeType =
   // Flow Control
   | 'start'
   | 'end'
+  | 'exit'
   // Navigation
   | 'navigate'
   | 'goBack'
@@ -119,12 +120,20 @@ export interface LoopData {
   items?: string; // forEach用の項目リスト
 }
 
+export interface TestVariable {
+  name: string;
+  description?: string;
+  type: 'string' | 'number' | 'boolean' | 'any';
+  value?: any;
+}
+
 export interface TestFlow {
   id: string;
   name: string;
   description?: string;
   nodes: TestNode[];
   edges: Edge[];
+  variables?: TestVariable[];
   config?: TestConfig;
   createdAt: string;
   updatedAt: string;

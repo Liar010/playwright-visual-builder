@@ -1,12 +1,13 @@
 import { Node, Edge } from 'reactflow';
 import * as yaml from 'yaml';
-import type { TestFlow, TestConfig } from '@playwright-visual-builder/shared';
+import type { TestFlow, TestConfig, TestVariable } from '@playwright-visual-builder/shared';
 
 export type ImportFormat = 'json' | 'yaml';
 
 export interface ImportResult {
   nodes: Node[];
   edges: Edge[];
+  variables?: TestVariable[];
   config?: TestConfig;
   metadata?: {
     name: string;
@@ -43,6 +44,7 @@ export async function importFlow(
     return {
       nodes: flow.nodes as Node[],
       edges: flow.edges,
+      variables: flow.variables,
       config: flow.config,
       metadata: {
         name: flow.name,

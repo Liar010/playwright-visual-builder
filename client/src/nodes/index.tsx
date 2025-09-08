@@ -4,6 +4,7 @@ import type { NodeType } from '@playwright-visual-builder/shared';
 import ConditionNode from './ConditionNode';
 import LoopNode from './LoopNode';
 import EndNode from './EndNode';
+import ExitNode from './ExitNode';
 import CustomCodeNode from './CustomCodeNode';
 import CommentNode from './CommentNode';
 import { DiscoverSelectorsNode } from './DiscoverSelectorsNode';
@@ -112,4 +113,6 @@ export const nodeTypes = {
   comment: CommentNode,
   // Selector Discovery
   discoverSelectors: DiscoverSelectorsNode,
+  // Flow Control
+  exit: ExitNode,
 };

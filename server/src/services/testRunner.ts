@@ -1150,6 +1150,20 @@ export class TestRunner {
           // コメントノードは完全にスキップ（ログも出力しない）
           break;
 
+        case 'exit':
+          // 終了ノードの処理
+          const exitMessage = data.action?.message || 'Test terminated by exit node';
+          const exitCode = data.action?.exitCode ?? 1;
+          
+          // 終了メッセージをログに出力
+          this.emitLog('error', `Test exit: ${exitMessage}`, {
+            exitCode,
+            nodeId: node.id
+          });
+          
+          // テストを失敗として終了
+          throw new Error(`Test terminated: ${exitMessage} (exit code: ${exitCode})`);
+
         case 'customCode':
           // カスタムコードの実行
           if (data.customCode?.code) {
@@ -1465,12 +1479,17 @@ export class TestRunner {
           // 変数を置換してから評価
           let expression = conditionData.expression || '';
           
+          // 元の式を保存
+          const originalExpression = expression;
+          
           // 変数の置換処理
           // ${variable_name} または {{variable_name}} 形式の変数を置換
+          const replacedVars: Record<string, any> = {};
           expression = expression.replace(/\$\{([^}]+)\}|\{\{([^}]+)\}\}/g, (match: string, p1: string, p2: string) => {
             const varName = p1 || p2;
             const value = this.variables.get(varName);
             if (value !== undefined) {
+              replacedVars[varName] = value;
               // 文字列の場合はエスケープして引用符で囲む
               if (typeof value === 'string') {
                 return JSON.stringify(value);
@@ -1483,10 +1502,20 @@ export class TestRunner {
           // text_nodeId形式の変数も置換（後方互換性のため）
           this.variables.forEach((value, key) => {
             if (expression.includes(key)) {
+              replacedVars[key] = value;
               const replacement = typeof value === 'string' ? JSON.stringify(value) : String(value);
               expression = expression.replace(new RegExp(`\\b${key}\\b`, 'g'), replacement);
             }
           });
+          
+          // 変数が使用された場合はログに記録
+          if (Object.keys(replacedVars).length > 0) {
+            this.emitLog('info', 'Condition variables replaced', {
+              originalExpression,
+              evaluatedExpression: expression,
+              variables: replacedVars
+            });
+          }
           
           console.log(`Evaluating expression: ${expression}`);
           

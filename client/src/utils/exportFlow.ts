@@ -1,6 +1,6 @@
 import { Node, Edge } from 'reactflow';
 import * as yaml from 'yaml';
-import type { TestFlow, TestConfig } from '@playwright-visual-builder/shared';
+import type { TestFlow, TestConfig, TestVariable } from '@playwright-visual-builder/shared';
 import { generatePlaywrightCodeV2 } from './codeGeneratorV2';
 
 export type ExportFormat = 'json' | 'yaml' | 'playwright-js' | 'playwright-ts';
@@ -17,17 +17,18 @@ export interface ExportOptions {
 export function exportFlow(
   nodes: Node[],
   edges: Edge[],
+  variables: TestVariable[] | undefined,
   config: TestConfig,
   options: ExportOptions
 ): string {
   switch (options.format) {
     case 'json':
-      return exportAsJSON(nodes, edges, config, options);
+      return exportAsJSON(nodes, edges, variables, config, options);
     case 'yaml':
-      return exportAsYAML(nodes, edges, config, options);
+      return exportAsYAML(nodes, edges, variables, config, options);
     case 'playwright-js':
     case 'playwright-ts':
-      return exportAsPlaywright(nodes, edges, config, options.format === 'playwright-ts');
+      return exportAsPlaywright(nodes, edges, variables, config, options.format === 'playwright-ts');
     default:
       throw new Error(`Unsupported export format: ${options.format}`);
   }
@@ -39,6 +40,7 @@ export function exportFlow(
 function exportAsJSON(
   nodes: Node[],
   edges: Edge[],
+  variables: TestVariable[] | undefined,
   config: TestConfig,
   options: ExportOptions
 ): string {
@@ -48,6 +50,7 @@ function exportAsJSON(
     description: 'Exported from Playwright Visual Builder',
     nodes: nodes as any,
     edges: edges as any,
+    variables: variables,
     config: options.includeConfig ? config : undefined,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -64,6 +67,7 @@ function exportAsJSON(
 function exportAsYAML(
   nodes: Node[],
   edges: Edge[],
+  variables: TestVariable[] | undefined,
   config: TestConfig,
   options: ExportOptions
 ): string {
@@ -73,6 +77,7 @@ function exportAsYAML(
     description: 'Exported from Playwright Visual Builder',
     nodes: nodes as any,
     edges: edges as any,
+    variables: variables,
     config: options.includeConfig ? config : undefined,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -87,11 +92,13 @@ function exportAsYAML(
 function exportAsPlaywright(
   nodes: Node[],
   edges: Edge[],
+  _variables: TestVariable[] | undefined,
   _config: TestConfig,
   _isTypeScript: boolean
 ): string {
   // V2のコードジェネレーターを使用（ネストされた構造に対応）
   // TypeScript/JavaScript の違いは現在の実装では同じ
+  // TODO: 将来的に変数情報もPlaywrightコードに反映
   return generatePlaywrightCodeV2(nodes, edges);
 }
 

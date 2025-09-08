@@ -181,9 +181,12 @@ function FlowBuilder() {
     setEdges(prev => [...prev, ...newEdges]);
   };
 
-  const handleImport = (importedNodes: Node[], importedEdges: Edge[], importedConfig?: TestConfig) => {
+  const handleImport = (importedNodes: Node[], importedEdges: Edge[], importedVariables?: Variable[], importedConfig?: TestConfig) => {
     setNodes(importedNodes);
     setEdges(importedEdges);
+    if (importedVariables) {
+      setVariables(importedVariables);
+    }
     if (importedConfig) {
       setTestConfig(importedConfig);
     }
@@ -431,6 +434,7 @@ function FlowBuilder() {
         onClose={() => setIsExportDialogOpen(false)}
         nodes={nodes}
         edges={edges}
+        variables={variables}
         config={testConfig}
       />
       <ImportFlowDialog
