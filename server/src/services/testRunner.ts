@@ -58,10 +58,13 @@ export class TestRunner {
         edgesBySource.get(edge.source)!.push(edge);
       });
 
-      this.testResult.steps = nodes.map((node) => ({
-        nodeId: node.id,
-        status: 'pending',
-      }));
+      // コメントノードを除外してstepsを初期化
+      this.testResult.steps = nodes
+        .filter((node) => node.type !== 'comment')
+        .map((node) => ({
+          nodeId: node.id,
+          status: 'pending',
+        }));
 
       this.emitUpdate();
 
@@ -304,6 +307,11 @@ export class TestRunner {
   }
 
   private async executeNode(node: Node) {
+    // コメントノードの場合は何もしない
+    if (node.type === 'comment') {
+      return;
+    }
+    
     const step = this.testResult.steps.find((s) => s.nodeId === node.id);
     if (!step || !this.page) return;
 
