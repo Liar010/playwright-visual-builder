@@ -106,7 +106,31 @@ export class TestRunner {
           
           console.log(`Executing condition: ${node.data.label || 'If/Else'}`);
           const conditionResult = await this.evaluateCondition(node);
-          console.log(`Condition evaluated: ${conditionResult ? 'TRUE' : 'FALSE'}`);
+          
+          // デバッグモードの場合、条件評価の詳細をログ出力
+          if (this.debugMode) {
+            console.log(`[DEBUG] Condition Evaluation`);
+            console.log(`  Node ID: ${node.id}`);
+            console.log(`  Result: ${conditionResult ? 'TRUE' : 'FALSE'}`);
+            console.log(`  Condition Type: ${node.data.condition?.type}`);
+            if (node.data.condition?.expression) {
+              console.log(`  Expression: ${node.data.condition.expression}`);
+            }
+            // 変数が使用されている場合は現在の変数状態も出力
+            if (node.data.condition?.expression?.includes('${') || node.data.condition?.expression?.includes('{{')) {
+              this.logAllVariables();
+            }
+            
+            // デバッグログをファイルに保存
+            await this.saveDebugLog('condition', {
+              nodeId: node.id,
+              result: conditionResult,
+              condition: node.data.condition,
+              variables: Object.fromEntries(this.variables)
+            });
+          } else {
+            console.log(`Condition evaluated: ${conditionResult ? 'TRUE' : 'FALSE'}`);
+          }
           
           // 条件評価後にステータスを更新
           if (step) {
@@ -587,11 +611,33 @@ export class TestRunner {
             timeout: 10000,
           });
           const textContent = await this.page.locator(textSelector).textContent();
-          console.log(`Text content: ${textContent}`);
+          
           // 変数名が指定されていれば保存、なければnode.idをキーとして保存
           const varName = data.action?.variableName || data.action?.variable || `text_${node.id}`;
           this.variables.set(varName, textContent);
-          console.log(`Stored text in variable: ${varName} = "${textContent}"`);
+          
+          // ログシステムに変数の値を送信
+          const textLogMessage = `Variable stored: ${varName} = "${textContent?.substring(0, 100)}${textContent && textContent.length > 100 ? '...' : ''}"`;
+          this.emitLog('info', textLogMessage, {
+            variableName: varName,
+            value: textContent,
+            nodeId: node.id,
+            selector: textSelector
+          });
+          
+          // デバッグモードの場合、詳細情報も出力
+          if (this.debugMode) {
+            console.log(`[DEBUG] Variable Set - getText`);
+            console.log(`  Node ID: ${node.id}`);
+            console.log(`  Selector: ${textSelector}`);
+            console.log(`  Variable Name: ${varName}`);
+            console.log(`  Value: "${textContent}"`);
+            console.log(`  Type: ${typeof textContent}`);
+            console.log(`  Length: ${textContent?.length || 0} characters`);
+            
+            // 全変数の現在の状態をログ出力
+            this.logAllVariables();
+          }
           break;
 
         case 'getAttribute':
@@ -602,11 +648,34 @@ export class TestRunner {
             timeout: 10000,
           });
           const attrValue = await this.page.locator(attrSelector).getAttribute(attrName);
-          console.log(`Attribute ${attrName}: ${attrValue}`);
+          
           // 変数名が指定されていれば保存、なければnode.idをキーとして保存
           const attrVarName = data.action?.variableName || data.action?.variable || `attr_${node.id}`;
           this.variables.set(attrVarName, attrValue);
-          console.log(`Stored attribute in variable: ${attrVarName} = "${attrValue}"`);
+          
+          // ログシステムに変数の値を送信
+          const attrLogMessage = `Variable stored: ${attrVarName} = "${attrValue}"`;
+          this.emitLog('info', attrLogMessage, {
+            variableName: attrVarName,
+            value: attrValue,
+            attribute: attrName,
+            nodeId: node.id,
+            selector: attrSelector
+          });
+          
+          // デバッグモードの場合、詳細情報も出力
+          if (this.debugMode) {
+            console.log(`[DEBUG] Variable Set - getAttribute`);
+            console.log(`  Node ID: ${node.id}`);
+            console.log(`  Selector: ${attrSelector}`);
+            console.log(`  Attribute: ${attrName}`);
+            console.log(`  Variable Name: ${attrVarName}`);
+            console.log(`  Value: "${attrValue}"`);
+            console.log(`  Type: ${typeof attrValue}`);
+            
+            // 全変数の現在の状態をログ出力
+            this.logAllVariables();
+          }
           break;
 
         case 'isEnabled':
@@ -812,8 +881,21 @@ export class TestRunner {
             timeout: 10000,
           });
           const count = await this.page.locator(countSelector).count();
+          
+          // 変数名が指定されていれば保存、なければnode.idをキーとして保存
+          const countVarName = data.action?.variableName || data.action?.variable || `count_${node.id}`;
+          this.variables.set(countVarName, count);
+          
+          // ログシステムに要素数の結果を送信
+          const countLogMessage = `Element count: ${count} (stored in ${countVarName})`;
+          this.emitLog('info', countLogMessage, {
+            variableName: countVarName,
+            value: count,
+            nodeId: node.id,
+            selector: countSelector
+          });
+          
           console.log(`Element count for "${countSelector}": ${count}`);
-          // TODO: 変数に保存する機能を実装
           break;
 
         case 'waitForResponse':
@@ -1560,6 +1642,52 @@ export class TestRunner {
     return sorted;
   }
 
+  // デバッグ用：全変数の現在の状態をログ出力
+  private logAllVariables(): void {
+    if (this.variables.size === 0) {
+      console.log('[DEBUG] No variables currently stored');
+      return;
+    }
+    
+    console.log('[DEBUG] Current Variables State:');
+    console.log('================================');
+    this.variables.forEach((value, key) => {
+      const valueStr = typeof value === 'string' 
+        ? `"${value.length > 100 ? value.substring(0, 100) + '...' : value}"`
+        : JSON.stringify(value);
+      console.log(`  ${key}: ${valueStr} (type: ${typeof value})`);
+    });
+    console.log('================================');
+  }
+
+  // デバッグログをファイルに保存
+  private async saveDebugLog(logType: string, data: any): Promise<void> {
+    if (!this.debugMode) return;
+    
+    try {
+      const fs = require('fs').promises;
+      const logDir = path.join(process.cwd(), '../logs');
+      
+      // ログディレクトリが存在しない場合は作成
+      await fs.mkdir(logDir, { recursive: true });
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const logFile = path.join(logDir, `debug_${this.flowId}_${timestamp}.log`);
+      
+      const logEntry = {
+        timestamp: new Date().toISOString(),
+        flowId: this.flowId,
+        type: logType,
+        data: data,
+        variables: Object.fromEntries(this.variables)
+      };
+      
+      await fs.appendFile(logFile, JSON.stringify(logEntry, null, 2) + '\n\n');
+    } catch (error) {
+      console.error('Failed to save debug log:', error);
+    }
+  }
+
   private emitUpdate() {
     if (this.socket) {
       this.socket.emit('test:update', this.testResult);
@@ -1574,8 +1702,8 @@ export class TestRunner {
       data,
     };
     
-    // デバッグモードの場合のみログを送信
-    if (this.debugMode && this.socket) {
+    // INFOレベル以上のログは常に送信、DEBUGレベルはデバッグモードの場合のみ
+    if (this.socket && (level !== 'debug' || this.debugMode)) {
       this.socket.emit('test:log', logEntry);
     }
     
