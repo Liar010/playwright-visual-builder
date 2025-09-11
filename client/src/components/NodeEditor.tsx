@@ -464,7 +464,7 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
               />
             </Form.Item>
             <Form.Item name="timeout" label="最大待機時間 (ms)">
-              <InputNumber min={1000} max={30000} step={1000} placeholder="10000" />
+              <InputNumber min={1000} max={60000} step={1000} placeholder="10000" />
             </Form.Item>
           </>
         );
