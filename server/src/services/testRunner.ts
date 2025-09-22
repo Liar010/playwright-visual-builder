@@ -1,4 +1,4 @@
-import { chromium, Browser, Page, BrowserContext } from 'playwright';
+import { chromium, Browser, Page, BrowserContext, FrameLocator } from 'playwright';
 import { Socket } from 'socket.io';
 import { Node, Edge } from 'reactflow';
 import * as fs from 'fs/promises';
@@ -17,6 +17,8 @@ export class TestRunner {
   private context: BrowserContext | null = null;
   private page: Page | null = null;
   private pages: Map<string, Page> = new Map(); // 複数ページ管理
+  private currentFrame: FrameLocator | null = null; // 現在のフレームコンテキスト
+  private frameStack: Array<FrameLocator | null> = []; // フレームスタック（ネストされたiframe用）
   private screenshots: Array<{ id: string; data: string; timestamp: number; nodeId: string; label?: string }> = [];
   private currentPageId: string = 'main'; // 現在のページID
   private testResult: TestResult;
@@ -410,65 +412,119 @@ export class TestRunner {
           break;
 
         case 'click':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.click(data.action?.selector || '');
+          const clickSelector = data.action?.selector || '';
+          const context = this.getContext();
+          
+          if (this.currentFrame) {
+            // フレーム内での操作
+            await context.locator(clickSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await context.locator(clickSelector).click();
+          } else {
+            // 通常のページでの操作
+            await this.page.waitForSelector(clickSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.click(clickSelector);
+          }
           break;
 
         case 'doubleClick':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.dblclick(data.action?.selector || '');
+          const dblClickSelector = data.action?.selector || '';
+          const dblContext = this.getContext();
+          
+          if (this.currentFrame) {
+            await dblContext.locator(dblClickSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await dblContext.locator(dblClickSelector).dblclick();
+          } else {
+            await this.page.waitForSelector(dblClickSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.dblclick(dblClickSelector);
+          }
           break;
 
         case 'rightClick':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.click(data.action?.selector || '', { button: 'right' });
+          const rightClickSelector = data.action?.selector || '';
+          const rightContext = this.getContext();
+          
+          if (this.currentFrame) {
+            await rightContext.locator(rightClickSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await rightContext.locator(rightClickSelector).click({ button: 'right' });
+          } else {
+            await this.page.waitForSelector(rightClickSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.click(rightClickSelector, { button: 'right' });
+          }
           break;
 
         case 'hover':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.hover(data.action?.selector || '');
+          const hoverSelector = data.action?.selector || '';
+          const hoverContext = this.getContext();
+          
+          if (this.currentFrame) {
+            await hoverContext.locator(hoverSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await hoverContext.locator(hoverSelector).hover();
+          } else {
+            await this.page.waitForSelector(hoverSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.hover(hoverSelector);
+          }
           break;
 
         case 'fill':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.fill(
-            data.action?.selector || '',
-            data.action?.value || ''
-          );
+          const fillSelector = data.action?.selector || '';
+          const fillValue = data.action?.value || '';
+          const fillContext = this.getContext();
+          
+          if (this.currentFrame) {
+            await fillContext.locator(fillSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await fillContext.locator(fillSelector).fill(fillValue);
+          } else {
+            await this.page.waitForSelector(fillSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.fill(fillSelector, fillValue);
+          }
           break;
 
         case 'select':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.selectOption(
-            data.action?.selector || '',
-            data.action?.value || ''
-          );
+          const selectSelector = data.action?.selector || '';
+          const selectValue = data.action?.value || '';
+          const selectContext = this.getContext();
+          
+          if (this.currentFrame) {
+            await selectContext.locator(selectSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await selectContext.locator(selectSelector).selectOption(selectValue);
+          } else {
+            await this.page.waitForSelector(selectSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.selectOption(selectSelector, selectValue);
+          }
           break;
 
         case 'check':
-          await this.page.waitForSelector(data.action?.selector || '', {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.check(data.action?.selector || '');
+          const checkSelector = data.action?.selector || '';
+          const checkContext = this.getContext();
+          
+          if (this.currentFrame) {
+            await checkContext.locator(checkSelector).waitFor({ state: 'visible', timeout: 10000 });
+            await checkContext.locator(checkSelector).check();
+          } else {
+            await this.page.waitForSelector(checkSelector, {
+              state: 'visible',
+              timeout: 10000,
+            });
+            await this.page.check(checkSelector);
+          }
           break;
 
         case 'uploadFile':
@@ -761,21 +817,28 @@ export class TestRunner {
           const iframeAction = data.action?.iframeAction || 'switch';
           
           if (iframeAction === 'switch') {
+            // 現在のコンテキストをスタックに保存
+            this.frameStack.push(this.currentFrame);
+            
             // iframe内に切り替え
-            const frameElement = await this.page.waitForSelector(iframeSelector, {
-              state: 'attached',
-              timeout: 10000,
-            });
-            const frame = await frameElement.contentFrame();
-            if (!frame) {
-              throw new Error(`Could not get frame from selector: ${iframeSelector}`);
+            this.emitLog('info', `Switching to iframe: ${iframeSelector}`);
+            
+            // frameLocatorを使用してフレームコンテキストを設定
+            this.currentFrame = this.page.frameLocator(iframeSelector);
+            
+            // フレームが存在することを確認
+            try {
+              await this.currentFrame.locator('body').waitFor({ timeout: 5000 });
+              this.emitLog('info', `Successfully switched to iframe: ${iframeSelector}`);
+            } catch (error) {
+              // フレームが見つからない場合は元に戻す
+              this.currentFrame = this.frameStack.pop() || null;
+              throw new Error(`Could not switch to iframe: ${iframeSelector}`);
             }
-            // フレーム内で操作を実行するために一時的にpageを置き換え
-            // 注: 実際の実装では、フレームコンテキストを管理する必要がある
-            console.log(`Switched to iframe: ${iframeSelector}`);
           } else if (iframeAction === 'exit') {
-            // メインフレームに戻る
-            console.log('Exited iframe context');
+            // 前のコンテキストに戻る
+            this.currentFrame = this.frameStack.pop() || null;
+            this.emitLog('info', `Exited iframe context, returned to ${this.currentFrame ? 'parent frame' : 'main page'}`);
           }
           break;
 
@@ -1729,6 +1792,16 @@ export class TestRunner {
     if (this.socket) {
       this.socket.emit('test:update', this.testResult);
     }
+  }
+
+  /**
+   * 現在の操作コンテキスト（ページまたはフレーム）を取得
+   */
+  private getContext(): Page | FrameLocator {
+    if (!this.page) {
+      throw new Error('Page is not initialized');
+    }
+    return this.currentFrame || this.page;
   }
 
   private emitLog(level: 'info' | 'warn' | 'error' | 'debug', message: string, data?: any) {

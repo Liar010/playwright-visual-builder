@@ -411,19 +411,35 @@ function generateNodeCode(node: Node, indentLevel: number, isInIframeContext: bo
 
     // Mouse Actions
     case 'click':
-      code = `await ${locator}.click('${data.action?.selector || ''}');`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').click();`;
+      } else {
+        code = `await ${locator}.click('${data.action?.selector || ''}');`;
+      }
       break;
     
     case 'doubleClick':
-      code = `await ${locator}.dblclick('${data.action?.selector || ''}');`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').dblclick();`;
+      } else {
+        code = `await ${locator}.dblclick('${data.action?.selector || ''}');`;
+      }
       break;
     
     case 'rightClick':
-      code = `await ${locator}.click('${data.action?.selector || ''}', { button: 'right' });`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').click({ button: 'right' });`;
+      } else {
+        code = `await ${locator}.click('${data.action?.selector || ''}', { button: 'right' });`;
+      }
       break;
     
     case 'hover':
-      code = `await ${locator}.hover('${data.action?.selector || ''}');`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').hover();`;
+      } else {
+        code = `await ${locator}.hover('${data.action?.selector || ''}');`;
+      }
       break;
     
     case 'dragAndDrop':
@@ -433,18 +449,30 @@ function generateNodeCode(node: Node, indentLevel: number, isInIframeContext: bo
     // Input Actions
     case 'fill': {
       const value = processVariableReferences(data.action?.value || '', declaredVars);
-      code = `await ${locator}.fill('${data.action?.selector || ''}', ${value});`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').fill(${value});`;
+      } else {
+        code = `await ${locator}.fill('${data.action?.selector || ''}', ${value});`;
+      }
       break;
     }
 
     case 'select': {
       const value = processVariableReferences(data.action?.value || '', declaredVars);
-      code = `await ${locator}.selectOption('${data.action?.selector || ''}', ${value});`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').selectOption(${value});`;
+      } else {
+        code = `await ${locator}.selectOption('${data.action?.selector || ''}', ${value});`;
+      }
       break;
     }
 
     case 'check':
-      code = `await ${locator}.check('${data.action?.selector || ''}');`;
+      if (isInIframeContext && frameVar) {
+        code = `await ${locator}.locator('${data.action?.selector || ''}').check();`;
+      } else {
+        code = `await ${locator}.check('${data.action?.selector || ''}');`;
+      }
       break;
     
     case 'uploadFile':

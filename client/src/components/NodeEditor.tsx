@@ -781,7 +781,12 @@ export default function NodeEditor({ node, isOpen, onClose, onUpdate, onDelete, 
             </Form.Item>
             {form.getFieldValue('iframeAction') === 'switch' && (
               <Form.Item name="selector" label="iframeセレクタ">
-                <Input placeholder="iframe#content, iframe[src*='embed']" />
+                <SelectorInput 
+                  placeholder="iframe#content, iframe[src*='embed']"
+                  savedSelectors={savedSelectors}
+                  onReload={loadSavedSelectors}
+                  loading={loadingSelectors}
+                />
               </Form.Item>
             )}
           </>
