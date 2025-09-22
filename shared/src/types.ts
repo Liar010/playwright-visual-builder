@@ -168,6 +168,7 @@ export interface TestResult {
   endTime?: string;
   steps: StepResult[];
   error?: string;
+  executionTrace?: string[];
 }
 
 export interface StepResult {

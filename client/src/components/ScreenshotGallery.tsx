@@ -34,6 +34,7 @@ interface ScreenshotGalleryProps {
   onClose: () => void;
   screenshots: Screenshot[];
   logs?: LogEntry[];
+  executionTrace?: string[];
   debugMode?: boolean;
   onClear?: () => void;
   onClearLogs?: () => void;
@@ -41,7 +42,7 @@ interface ScreenshotGalleryProps {
 
 export type { Screenshot, LogEntry };
 
-export default function ScreenshotGallery({ visible, onClose, screenshots, logs = [], debugMode = false, onClear, onClearLogs }: ScreenshotGalleryProps) {
+export default function ScreenshotGallery({ visible, onClose, screenshots, logs = [], executionTrace = [], debugMode = false, onClear, onClearLogs }: ScreenshotGalleryProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const handleDownload = (screenshot: Screenshot) => {
@@ -347,6 +348,50 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
                       ))}
                     </div>
                   )}
+                  </div>
+                </div>
+              )
+            }] : []),
+            ...(executionTrace.length > 0 ? [{
+              key: 'executionTrace',
+              label: (
+                <Space>
+                  <span>実行コード</span>
+                  <Badge count={executionTrace.length} size="small" />
+                </Space>
+              ),
+              children: (
+                <div style={{ 
+                  maxHeight: '70vh', 
+                  overflowY: 'auto',
+                  padding: '16px',
+                  backgroundColor: '#1e1e1e'
+                }}>
+                  <pre style={{ 
+                    margin: 0,
+                    padding: '16px',
+                    fontSize: '12px',
+                    fontFamily: 'Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace',
+                    color: '#d4d4d4',
+                    backgroundColor: '#1e1e1e',
+                    borderRadius: '8px',
+                    overflow: 'auto'
+                  }}>
+                    <code>
+                      {executionTrace.map((line, index) => (
+                        <div key={index} style={{ marginBottom: '4px' }}>
+                          <span style={{ color: '#858585', marginRight: '16px', display: 'inline-block', width: '30px' }}>
+                            {(index + 1).toString().padStart(3, ' ')}
+                          </span>
+                          <span style={{ color: '#d4d4d4' }}>{line}</span>
+                        </div>
+                      ))}
+                    </code>
+                  </pre>
+                  <div style={{ marginTop: '16px', padding: '8px', backgroundColor: '#2d2d2d', borderRadius: '4px' }}>
+                    <Text style={{ color: '#858585', fontSize: '11px' }}>
+                      実行されたPlaywrightコード • 合計 {executionTrace.length} 行
+                    </Text>
                   </div>
                 </div>
               )

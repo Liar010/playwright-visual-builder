@@ -31,6 +31,7 @@ export class TestRunner {
   private executionOrder: string[] = []; // 実行順序を記録
   private variables: Map<string, any> = new Map(); // 変数ストレージ
   private flowId: string | null = null; // フローのID
+  private executedCode: string[] = []; // 実行されたPlaywrightコードを記録
 
   constructor(socket?: Socket, config?: TestConfig) {
     this.socket = socket || null;
@@ -190,7 +191,7 @@ export class TestRunner {
       this.testResult.status = 'passed';
       this.testResult.endTime = new Date().toISOString();
       this.emitUpdate();
-      return { ...this.testResult, screenshots: this.screenshots };
+      return { ...this.testResult, screenshots: this.screenshots, executionTrace: this.executedCode };
     } catch (error) {
       this.testResult.status = 'failed';
       this.testResult.endTime = new Date().toISOString();
@@ -221,6 +222,13 @@ export class TestRunner {
     }
     console.log(`Launching browser in ${isHeadless ? 'headless' : 'headed'} mode`);
     
+    // ブラウザ起動コードを記録
+    this.recordExecutedCode(`import { chromium } from 'playwright';`);
+    this.recordExecutedCode(``);
+    this.recordExecutedCode(`const browser = await chromium.launch({`);
+    this.recordExecutedCode(`  headless: ${isHeadless},`);
+    this.recordExecutedCode(`});`);
+    
     this.browser = await chromium.launch({
       headless: isHeadless,
       downloadsPath: path.join(process.cwd(), '../downloads'),
@@ -249,6 +257,17 @@ export class TestRunner {
     }
 
     this.context = await this.browser.newContext(contextOptions);
+    
+    // コンテキストとページの作成を記録
+    this.recordExecutedCode(`const context = await browser.newContext({`);
+    this.recordExecutedCode(`  viewport: { width: ${contextOptions.viewport.width}, height: ${contextOptions.viewport.height} },`);
+    if (contextOptions.httpCredentials) {
+      this.recordExecutedCode(`  httpCredentials: { username: '***', password: '***' },`);
+    }
+    this.recordExecutedCode(`});`);
+    this.recordExecutedCode(`const page = await context.newPage();`);
+    this.recordExecutedCode(``);
+    
     this.page = await this.context.newPage();
     
     // メインページを登録
@@ -268,9 +287,22 @@ export class TestRunner {
 
   private async cleanup() {
     this.stopScreenshotStreaming();
-    if (this.page) await this.page.close();
-    if (this.context) await this.context.close();
-    if (this.browser) await this.browser.close();
+    
+    // クリーンアップコードを記録
+    this.recordExecutedCode(``);
+    this.recordExecutedCode(`// Cleanup`);
+    if (this.page) {
+      this.recordExecutedCode(`await page.close();`);
+      await this.page.close();
+    }
+    if (this.context) {
+      this.recordExecutedCode(`await context.close();`);
+      await this.context.close();
+    }
+    if (this.browser) {
+      this.recordExecutedCode(`await browser.close();`);
+      await this.browser.close();
+    }
   }
   
   private startScreenshotStreaming() {
@@ -385,6 +417,7 @@ export class TestRunner {
           this.emitLog('debug', `Navigate input URL: "${inputUrl}"`);
           const url = this.resolveUrl(inputUrl);
           this.emitLog('info', `Navigating to: ${url}`);
+          this.recordExecutedCode(`await page.goto('${url}', { waitUntil: 'networkidle', timeout: 30000 });`);
           await this.retryOnNetworkError(async () => {
             await this.page!.goto(url, {
               waitUntil: 'networkidle',
@@ -396,16 +429,19 @@ export class TestRunner {
 
         case 'goBack':
           console.log('Going back');
+          this.recordExecutedCode(`await page.goBack();`);
           await this.page.goBack();
           break;
 
         case 'goForward':
           console.log('Going forward');
+          this.recordExecutedCode(`await page.goForward();`);
           await this.page.goForward();
           break;
 
         case 'reload':
           console.log('Reloading page');
+          this.recordExecutedCode(`await page.reload({ waitUntil: 'networkidle' });`);
           await this.retryOnNetworkError(async () => {
             await this.page!.reload({ waitUntil: 'networkidle' });
           }, 'Reload page');
@@ -417,10 +453,12 @@ export class TestRunner {
           
           if (this.currentFrame) {
             // フレーム内での操作
+            this.recordExecutedCode(`await frame.locator('${clickSelector}').click();`);
             await context.locator(clickSelector).waitFor({ state: 'visible', timeout: 10000 });
             await context.locator(clickSelector).click();
           } else {
             // 通常のページでの操作
+            this.recordExecutedCode(`await page.click('${clickSelector}');`);
             await this.page.waitForSelector(clickSelector, {
               state: 'visible',
               timeout: 10000,
@@ -434,9 +472,11 @@ export class TestRunner {
           const dblContext = this.getContext();
           
           if (this.currentFrame) {
+            this.recordExecutedCode(`await frame.locator('${dblClickSelector}').dblclick();`);
             await dblContext.locator(dblClickSelector).waitFor({ state: 'visible', timeout: 10000 });
             await dblContext.locator(dblClickSelector).dblclick();
           } else {
+            this.recordExecutedCode(`await page.dblclick('${dblClickSelector}');`);
             await this.page.waitForSelector(dblClickSelector, {
               state: 'visible',
               timeout: 10000,
@@ -450,9 +490,11 @@ export class TestRunner {
           const rightContext = this.getContext();
           
           if (this.currentFrame) {
+            this.recordExecutedCode(`await frame.locator('${rightClickSelector}').click({ button: 'right' });`);
             await rightContext.locator(rightClickSelector).waitFor({ state: 'visible', timeout: 10000 });
             await rightContext.locator(rightClickSelector).click({ button: 'right' });
           } else {
+            this.recordExecutedCode(`await page.click('${rightClickSelector}', { button: 'right' });`);
             await this.page.waitForSelector(rightClickSelector, {
               state: 'visible',
               timeout: 10000,
@@ -466,9 +508,11 @@ export class TestRunner {
           const hoverContext = this.getContext();
           
           if (this.currentFrame) {
+            this.recordExecutedCode(`await frame.locator('${hoverSelector}').hover();`);
             await hoverContext.locator(hoverSelector).waitFor({ state: 'visible', timeout: 10000 });
             await hoverContext.locator(hoverSelector).hover();
           } else {
+            this.recordExecutedCode(`await page.hover('${hoverSelector}');`);
             await this.page.waitForSelector(hoverSelector, {
               state: 'visible',
               timeout: 10000,
@@ -483,9 +527,11 @@ export class TestRunner {
           const fillContext = this.getContext();
           
           if (this.currentFrame) {
+            this.recordExecutedCode(`await frame.locator('${fillSelector}').fill('${fillValue}');`);
             await fillContext.locator(fillSelector).waitFor({ state: 'visible', timeout: 10000 });
             await fillContext.locator(fillSelector).fill(fillValue);
           } else {
+            this.recordExecutedCode(`await page.fill('${fillSelector}', '${fillValue}');`);
             await this.page.waitForSelector(fillSelector, {
               state: 'visible',
               timeout: 10000,
@@ -500,9 +546,13 @@ export class TestRunner {
           const selectContext = this.getContext();
           
           if (this.currentFrame) {
+            this.recordExecutedCode(`await frame.locator('${selectSelector}').waitFor({ state: 'visible', timeout: 10000 });`);
+            this.recordExecutedCode(`await frame.locator('${selectSelector}').selectOption('${selectValue}');`);
             await selectContext.locator(selectSelector).waitFor({ state: 'visible', timeout: 10000 });
             await selectContext.locator(selectSelector).selectOption(selectValue);
           } else {
+            this.recordExecutedCode(`await page.waitForSelector('${selectSelector}', { state: 'visible', timeout: 10000 });`);
+            this.recordExecutedCode(`await page.selectOption('${selectSelector}', '${selectValue}');`);
             await this.page.waitForSelector(selectSelector, {
               state: 'visible',
               timeout: 10000,
@@ -516,9 +566,13 @@ export class TestRunner {
           const checkContext = this.getContext();
           
           if (this.currentFrame) {
+            this.recordExecutedCode(`await frame.locator('${checkSelector}').waitFor({ state: 'visible', timeout: 10000 });`);
+            this.recordExecutedCode(`await frame.locator('${checkSelector}').check();`);
             await checkContext.locator(checkSelector).waitFor({ state: 'visible', timeout: 10000 });
             await checkContext.locator(checkSelector).check();
           } else {
+            this.recordExecutedCode(`await page.waitForSelector('${checkSelector}', { state: 'visible', timeout: 10000 });`);
+            this.recordExecutedCode(`await page.check('${checkSelector}');`);
             await this.page.waitForSelector(checkSelector, {
               state: 'visible',
               timeout: 10000,
@@ -530,6 +584,8 @@ export class TestRunner {
         case 'uploadFile':
           const fileSelector = data.action?.selector || '';
           const uploadFilePath = data.action?.filePath || '';
+          this.recordExecutedCode(`await page.waitForSelector('${fileSelector}', { state: 'visible', timeout: 10000 });`);
+          this.recordExecutedCode(`await page.setInputFiles('${fileSelector}', '${uploadFilePath}');`);
           await this.page.waitForSelector(fileSelector, {
             state: 'visible',
             timeout: 10000,
@@ -540,6 +596,8 @@ export class TestRunner {
 
         case 'focus':
           const focusSelector = data.action?.selector || '';
+          this.recordExecutedCode(`await page.waitForSelector('${focusSelector}', { state: 'visible', timeout: 10000 });`);
+          this.recordExecutedCode(`await page.focus('${focusSelector}');`);
           await this.page.waitForSelector(focusSelector, {
             state: 'visible',
             timeout: 10000,
@@ -550,6 +608,8 @@ export class TestRunner {
 
         case 'blur':
           const blurSelector = data.action?.selector || '';
+          this.recordExecutedCode(`await page.waitForSelector('${blurSelector}', { state: 'visible', timeout: 10000 });`);
+          this.recordExecutedCode(`await page.locator('${blurSelector}').blur();`);
           await this.page.waitForSelector(blurSelector, {
             state: 'visible',
             timeout: 10000,
@@ -561,6 +621,7 @@ export class TestRunner {
         case 'keyboard':
           const keyboardKey = data.action?.key || '';
           console.log(`Pressing key: ${keyboardKey}`);
+          this.recordExecutedCode(`await page.keyboard.press('${keyboardKey}');`);
           await this.page.keyboard.press(keyboardKey);
           break;
 
@@ -570,9 +631,14 @@ export class TestRunner {
           const amount = data.action?.amount || 100;
           
           if (scrollSelector) {
+            this.recordExecutedCode(`await page.locator('${scrollSelector}').scrollIntoViewIfNeeded();`);
             await this.page.locator(scrollSelector).scrollIntoViewIfNeeded();
           } else {
             // ページ全体をスクロール
+            const scrollCode = `await page.evaluate(() => {
+  window.scrollBy(${direction === 'left' ? -amount : direction === 'right' ? amount : 0}, ${direction === 'up' ? -amount : direction === 'down' ? amount : 0});
+});`;
+            this.recordExecutedCode(scrollCode);
             await this.page.evaluate(({ dir, amt }) => {
               // @ts-ignore - windowはブラウザコンテキストで利用可能
               if (dir === 'down') {
@@ -592,12 +658,16 @@ export class TestRunner {
           break;
 
         case 'wait':
-          await this.page.waitForTimeout(data.action?.timeout || 1000);
+          console.log(`Waiting for ${data.action?.timeout || 1000}ms`);
+          const waitTime = data.action?.timeout || 1000;
+          this.recordExecutedCode(`await page.waitForTimeout(${waitTime});`);
+          await this.page.waitForTimeout(waitTime);
           break;
 
         case 'waitForURL':
           const waitUrlPattern = data.action?.urlPattern || '';
           console.log(`Waiting for URL: ${waitUrlPattern}`);
+          this.recordExecutedCode(`await page.waitForURL('${waitUrlPattern}', { timeout: 30000 });`);
           await this.page.waitForURL(waitUrlPattern, { timeout: 30000 });
           console.log(`URL matched: ${this.page.url()}`);
           break;
@@ -605,6 +675,7 @@ export class TestRunner {
         case 'waitForLoadState':
           const state = data.action?.state || 'networkidle';
           console.log(`Waiting for load state: ${state}`);
+          this.recordExecutedCode(`await page.waitForLoadState('${state}');`);
           await this.page.waitForLoadState(state as 'load' | 'domcontentloaded' | 'networkidle');
           break;
 
@@ -619,6 +690,7 @@ export class TestRunner {
           console.log(`Waiting for element to be hidden: ${selector} (timeout: ${waitHiddenTimeout}ms)`);
           
           // 要素が非表示になるまで待機
+          this.recordExecutedCode(`await page.waitForSelector('${selector}', { state: 'hidden', timeout: ${waitHiddenTimeout} });`);
           await this.page.waitForSelector(selector, {
             state: 'hidden',
             timeout: waitHiddenTimeout,
@@ -628,6 +700,10 @@ export class TestRunner {
           break;
 
         case 'assertion':
+          const assertionType = data.assertion?.comparison || 'unknown';
+          const assertionSelector = data.assertion?.selector || '';
+          const assertionExpected = data.assertion?.expected || '';
+          this.recordExecutedCode(`// Assertion: ${assertionType} for "${assertionSelector}"${assertionExpected ? ` with expected value "${assertionExpected}"` : ''}`);
           await this.handleAssertion(data);
           break;
 
@@ -641,6 +717,7 @@ export class TestRunner {
           );
           
           // スクリーンショットを取得
+          this.recordExecutedCode(`await page.screenshot({ path: '${screenshotPath}', fullPage: true });`);
           const screenshotBuffer = await this.page.screenshot({ 
             path: screenshotPath, 
             fullPage: true 
@@ -670,6 +747,8 @@ export class TestRunner {
 
         case 'getText':
           const textSelector = data.action?.selector || '';
+          this.recordExecutedCode(`await page.waitForSelector('${textSelector}', { state: 'visible', timeout: 10000 });`);
+          this.recordExecutedCode(`const textContent = await page.locator('${textSelector}').textContent();`);
           await this.page.waitForSelector(textSelector, {
             state: 'visible',
             timeout: 10000,
@@ -707,6 +786,8 @@ export class TestRunner {
         case 'getAttribute':
           const attrSelector = data.action?.selector || '';
           const attrName = data.action?.attribute || '';
+          this.recordExecutedCode(`await page.waitForSelector('${attrSelector}', { state: 'visible', timeout: 10000 });`);
+          this.recordExecutedCode(`const attrValue = await page.locator('${attrSelector}').getAttribute('${attrName}');`);
           await this.page.waitForSelector(attrSelector, {
             state: 'visible',
             timeout: 10000,
@@ -824,6 +905,7 @@ export class TestRunner {
             this.emitLog('info', `Switching to iframe: ${iframeSelector}`);
             
             // frameLocatorを使用してフレームコンテキストを設定
+            this.recordExecutedCode(`const frame = page.frameLocator('${iframeSelector}');`);
             this.currentFrame = this.page.frameLocator(iframeSelector);
             
             // フレームが存在することを確認
@@ -837,6 +919,7 @@ export class TestRunner {
             }
           } else if (iframeAction === 'exit') {
             // 前のコンテキストに戻る
+            this.recordExecutedCode(`// Exit iframe and return to ${this.currentFrame ? 'parent frame' : 'main page'}`);
             this.currentFrame = this.frameStack.pop() || null;
             this.emitLog('info', `Exited iframe context, returned to ${this.currentFrame ? 'parent frame' : 'main page'}`);
           }
@@ -851,6 +934,17 @@ export class TestRunner {
           const dialogPromise = new Promise<void>((resolve) => {
             const handler = async (dialog: any) => {
               console.log(`Dialog appeared: ${dialog.type()} - "${dialog.message()}"`);
+              
+              // ダイアログ処理のコードを記録
+              if (dialogAction === 'accept') {
+                if (dialog.type() === 'prompt') {
+                  this.recordExecutedCode(`await dialog.accept('${dialogMessage}');`);
+                } else {
+                  this.recordExecutedCode(`await dialog.accept();`);
+                }
+              } else if (dialogAction === 'dismiss') {
+                this.recordExecutedCode(`await dialog.dismiss();`);
+              }
               
               try {
                 if (dialogAction === 'accept') {
@@ -878,29 +972,103 @@ export class TestRunner {
             
             if (this.page) {
               this.page.on('dialog', handler);
+              // ダイアログハンドラーの設定を記録
+              this.recordExecutedCode(`page.on('dialog', async (dialog) => { await dialog.${dialogAction}(${dialogAction === 'accept' && dialogMessage ? `'${dialogMessage}'` : ''}); });`);
             }
           });
           
           // ダイアログトリガーアクションがある場合は実行
           if (data.action?.triggerSelector) {
-            console.log(`Clicking trigger: ${data.action.triggerSelector}`);
-            await this.page.click(data.action.triggerSelector);
+            this.emitLog('info', `Attempting to click dialog trigger: ${data.action.triggerSelector}`);
             
-            // ダイアログが表示されるのを待つ
-            if (waitForDialog) {
-              try {
-                await Promise.race([
-                  dialogPromise,
-                  new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Dialog timeout')), 5000)
-                  )
-                ]);
-              } catch (error) {
-                console.warn('Dialog did not appear within 5 seconds');
+            try {
+              const context = this.getContext();
+              const triggerSelector = data.action.triggerSelector;
+              
+              // フレームコンテキストに応じて要素の確認とクリック
+              if (this.currentFrame) {
+                // iframe内の場合
+                this.emitLog('info', `Looking for trigger in iframe context`);
+                await context.locator(triggerSelector).waitFor({ 
+                  state: 'visible', 
+                  timeout: 10000 
+                });
+                this.emitLog('info', `Found trigger element in iframe: ${triggerSelector}`);
+                
+                // スクリーンショットを撮る（デバッグ用）
+                if (this.debugMode) {
+                  const screenshot = await this.page.screenshot();
+                  this.screenshots.push({
+                    id: `before-dialog-trigger-${Date.now()}`,
+                    data: screenshot.toString('base64'),
+                    timestamp: Date.now(),
+                    nodeId: node.id,
+                    label: 'Before Dialog Trigger (iframe)'
+                  });
+                }
+                
+                // iframe内でクリック
+                this.recordExecutedCode(`await frame.locator('${triggerSelector}').click(); // Dialog trigger`);
+                await context.locator(triggerSelector).click();
+                this.emitLog('info', `✓ Clicked trigger in iframe: ${triggerSelector}`);
+              } else {
+                // 通常のページの場合
+                await this.page.waitForSelector(triggerSelector, {
+                  state: 'visible',
+                  timeout: 10000
+                });
+                this.emitLog('info', `Found trigger element: ${triggerSelector}`);
+                
+                // スクリーンショットを撮る（デバッグ用）
+                if (this.debugMode) {
+                  const screenshot = await this.page.screenshot();
+                  this.screenshots.push({
+                    id: `before-dialog-trigger-${Date.now()}`,
+                    data: screenshot.toString('base64'),
+                    timestamp: Date.now(),
+                    nodeId: node.id,
+                    label: 'Before Dialog Trigger'
+                  });
+                }
+                
+                // トリガーをクリック
+                this.recordExecutedCode(`await page.click('${triggerSelector}'); // Dialog trigger`);
+                await this.page.click(triggerSelector);
+                this.emitLog('info', `✓ Clicked trigger: ${triggerSelector}`);
               }
+              
+              // ダイアログが表示されるのを待つ
+              if (waitForDialog) {
+                try {
+                  await Promise.race([
+                    dialogPromise,
+                    new Promise((_, reject) => 
+                      setTimeout(() => reject(new Error('Dialog timeout')), 5000)
+                    )
+                  ]);
+                  this.emitLog('info', '✓ Dialog appeared and was handled');
+                } catch (error) {
+                  this.emitLog('warn', '⚠️ Dialog did not appear within 5 seconds');
+                  
+                  // デバッグ用：ダイアログが出なかった場合のスクリーンショット
+                  if (this.debugMode) {
+                    const screenshot = await this.page.screenshot();
+                    this.screenshots.push({
+                      id: `no-dialog-after-trigger-${Date.now()}`,
+                      data: screenshot.toString('base64'),
+                      timestamp: Date.now(),
+                      nodeId: node.id,
+                      label: 'No Dialog After Trigger'
+                    });
+                  }
+                }
+              }
+            } catch (error) {
+              this.emitLog('error', `Failed to click trigger: ${error instanceof Error ? error.message : String(error)}`);
+              throw error;
             }
           } else {
-            console.log('Dialog handler set, waiting for dialog to appear...');
+            this.emitLog('info', 'Dialog handler set, waiting for dialog to appear from other actions...');
           }
           break;
 
@@ -1310,6 +1478,7 @@ export class TestRunner {
     }
 
     // セレクタが存在するまで待機
+    this.recordExecutedCode(`await page.waitForSelector('${selector}', { state: 'attached', timeout: 10000 });`);
     await this.page.waitForSelector(selector, {
       state: 'attached',
       timeout: 10000,
@@ -1320,6 +1489,7 @@ export class TestRunner {
     switch (comparison) {
       case 'exists':
         // 要素が表示されているか確認
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toBeVisible();`);
         const isVisible = await locator.isVisible();
         if (!isVisible) {
           throw new Error(`Element is not visible: ${selector}`);
@@ -1329,6 +1499,7 @@ export class TestRunner {
         
       case 'hidden':
         // display:none, visibility:hidden, または存在しない要素を検知
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toBeHidden();`);
         const isHidden = await locator.isHidden();
         if (!isHidden) {
           // 要素が表示されている場合はエラー
@@ -1338,6 +1509,7 @@ export class TestRunner {
         break;
         
       case 'contains':
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toContainText('${expected}');`);
         const contentText = await locator.textContent();
         if (!contentText?.includes(expected || '')) {
           throw new Error(`Text "${expected}" not found in element: ${selector}`);
@@ -1346,6 +1518,7 @@ export class TestRunner {
         break;
         
       case 'equals':
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toHaveText('${expected}');`);
         const exactText = await locator.textContent();
         if (exactText?.trim() !== expected?.trim()) {
           throw new Error(`Text mismatch. Expected: "${expected}", Got: "${exactText}"`);
@@ -1354,6 +1527,7 @@ export class TestRunner {
         break;
         
       case 'matches':
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toHaveText(/${expected}/);`);
         const text = await locator.textContent();
         const regex = new RegExp(expected || '');
         if (!regex.test(text || '')) {
@@ -1365,6 +1539,7 @@ export class TestRunner {
       case 'hasClass':
         // クラスの存在を確認（例: loader-bg）
         const className = expected || '';
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toHaveClass(/${className}/);`);
         const classes = await locator.getAttribute('class');
         if (!classes || !classes.split(' ').includes(className)) {
           throw new Error(`Element does not have class "${className}". Classes: ${classes}`);
@@ -1375,6 +1550,7 @@ export class TestRunner {
       case 'hasAttribute':
         // 属性の存在を確認
         const attrName = expected || '';
+        this.recordExecutedCode(`await expect(page.locator('${selector}')).toHaveAttribute('${attrName}');`);
         const attrValue = await locator.getAttribute(attrName);
         if (attrValue === null) {
           throw new Error(`Element does not have attribute: "${attrName}"`);
@@ -1826,6 +2002,17 @@ export class TestRunner {
       console.debug(message, data || '');
     } else {
       console.log(message, data || '');
+    }
+  }
+  
+  /**
+   * 実行されたPlaywrightコードを記録
+   */
+  private recordExecutedCode(code: string) {
+    this.executedCode.push(code);
+    // デバッグモードの場合はログにも出力
+    if (this.debugMode) {
+      this.emitLog('debug', `Executed: ${code}`);
     }
   }
   

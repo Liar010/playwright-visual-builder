@@ -22,6 +22,7 @@ interface TestRunnerProps {
   onClose: () => void;
   onScreenshot?: (screenshot: any) => void;
   onLog?: (log: LogEntry) => void;
+  onExecutionTrace?: (trace: string[]) => void;
 }
 
 interface LogEntry {
@@ -31,7 +32,7 @@ interface LogEntry {
   data?: any;
 }
 
-export default function TestRunner({ nodes, edges, config, onClose, onScreenshot, onLog }: TestRunnerProps) {
+export default function TestRunner({ nodes, edges, config, onClose, onScreenshot, onLog, onExecutionTrace }: TestRunnerProps) {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -74,6 +75,13 @@ export default function TestRunner({ nodes, edges, config, onClose, onScreenshot
     newSocket.on('screenshot', (screenshot: any) => {
       if (onScreenshot) {
         onScreenshot(screenshot);
+      }
+    });
+
+    // 実行トレースの受信
+    newSocket.on('test:executionTrace', (data: { trace: string[] }) => {
+      if (onExecutionTrace) {
+        onExecutionTrace(data.trace);
       }
     });
 

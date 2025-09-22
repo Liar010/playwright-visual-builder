@@ -14,7 +14,12 @@ export const getApiUrl = () => {
   if (import.meta.env.PROD) {
     return `http://${window.location.hostname}:53002`;
   }
-  // 開発環境（Viteプロキシ経由）の場合
+  // 開発環境の場合
+  // localhostまたは127.0.0.1以外からアクセスしている場合は、直接サーバーに接続
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `http://${window.location.hostname}:3002`;
+  }
+  // localhost/127.0.0.1からの場合はViteプロキシ経由
   return '';
 };
 

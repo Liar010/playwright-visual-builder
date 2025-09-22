@@ -65,7 +65,13 @@ io.on('connection', (socket) => {
     const config = data.config || {};
     const runner = new TestRunner(socket, config);
     try {
-      await runner.run(data.nodes, data.edges);
+      const result = await runner.run(data.nodes, data.edges);
+      // テスト完了時に実行トレースを送信
+      if (result.executionTrace) {
+        socket.emit('test:executionTrace', { 
+          trace: result.executionTrace 
+        });
+      }
     } catch (error) {
       console.error('Test execution error:', error);
       socket.emit('test:error', {

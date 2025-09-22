@@ -78,6 +78,7 @@ function FlowBuilder() {
   const [variables, setVariables] = useState<Variable[]>([]);
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [executionTrace, setExecutionTrace] = useState<string[]>([]);
   const [testConfig, setTestConfig] = useState<TestConfig>({
     headless: true,
     viewport: { width: 1280, height: 720 },
@@ -392,6 +393,9 @@ function FlowBuilder() {
           onLog={(log: LogEntry) => {
             setLogs(prev => [...prev, log].slice(-200)); // 最新200件を保持
           }}
+          onExecutionTrace={(trace: string[]) => {
+            setExecutionTrace(trace);
+          }}
         />
       )}
       <NodeEditor
@@ -447,9 +451,11 @@ function FlowBuilder() {
         onClose={() => setIsGalleryOpen(false)}
         screenshots={screenshots}
         logs={logs}
+        executionTrace={executionTrace}
         debugMode={testConfig.debug || false}
         onClear={() => {
           setScreenshots([]);
+          setExecutionTrace([]);
         }}
         onClearLogs={() => {
           setLogs([]);
