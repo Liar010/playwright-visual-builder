@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal, Card, Empty, Button, Space, Image, Badge, Tooltip, message, Tabs, Tag, Typography } from 'antd';
 import { 
   CameraOutlined, 
@@ -44,6 +44,7 @@ export type { Screenshot, LogEntry };
 
 export default function ScreenshotGallery({ visible, onClose, screenshots, logs = [], executionTrace = [], debugMode = false, onClear, onClearLogs }: ScreenshotGalleryProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [currentIndex, setCurrentIndex] = useState<number | null>(null);
 
   const handleDownload = (screenshot: Screenshot) => {
     const link = document.createElement('a');
@@ -98,6 +99,29 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
       second: '2-digit' 
     });
   };
+
+  // キーボードナビゲーションのハンドラー
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (!previewImage || currentIndex === null) return;
+
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        const newIndex = currentIndex - 1;
+        setCurrentIndex(newIndex);
+        setPreviewImage(screenshots[newIndex].data);
+      } else if (e.key === 'ArrowRight' && currentIndex < screenshots.length - 1) {
+        const newIndex = currentIndex + 1;
+        setCurrentIndex(newIndex);
+        setPreviewImage(screenshots[newIndex].data);
+      } else if (e.key === 'Escape') {
+        setPreviewImage(null);
+        setCurrentIndex(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [previewImage, currentIndex, screenshots]);
 
   return (
     <>
@@ -209,7 +233,11 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
                         cursor: 'pointer'
                       }}
                       className="screenshot-overlay"
-                      onClick={() => setPreviewImage(screenshot.data)}
+                      onClick={() => {
+                        const index = screenshots.findIndex(s => s.id === screenshot.id);
+                        setCurrentIndex(index);
+                        setPreviewImage(screenshot.data);
+                      }}
                     >
                       <Button
                         type="primary"
@@ -227,7 +255,11 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
                 }
                 actions={[
                   <Tooltip title="プレビュー">
-                    <ExpandOutlined key="preview" onClick={() => setPreviewImage(screenshot.data)} />
+                    <ExpandOutlined key="preview" onClick={() => {
+                        const index = screenshots.findIndex(s => s.id === screenshot.id);
+                        setCurrentIndex(index);
+                        setPreviewImage(screenshot.data);
+                      }} />
                   </Tooltip>,
                   <Tooltip title="ダウンロード">
                     <DownloadOutlined key="download" onClick={() => handleDownload(screenshot)} />
@@ -403,8 +435,50 @@ export default function ScreenshotGallery({ visible, onClose, screenshots, logs 
       {/* プレビューモーダル */}
       <Modal
         visible={!!previewImage}
-        footer={null}
-        onCancel={() => setPreviewImage(null)}
+        footer={
+          currentIndex !== null && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Button 
+                onClick={() => {
+                  if (currentIndex > 0) {
+                    const newIndex = currentIndex - 1;
+                    setCurrentIndex(newIndex);
+                    setPreviewImage(screenshots[newIndex].data);
+                  }
+                }}
+                disabled={currentIndex === 0}
+                icon={<span>←</span>}
+              >
+                前へ
+              </Button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                  {screenshots[currentIndex]?.label || 'Screenshot'}
+                </span>
+                <span style={{ fontSize: '12px', color: '#666' }}>
+                  {currentIndex + 1} / {screenshots.length}
+                </span>
+              </div>
+              <Button 
+                onClick={() => {
+                  if (currentIndex < screenshots.length - 1) {
+                    const newIndex = currentIndex + 1;
+                    setCurrentIndex(newIndex);
+                    setPreviewImage(screenshots[newIndex].data);
+                  }
+                }}
+                disabled={currentIndex === screenshots.length - 1}
+                icon={<span>→</span>}
+              >
+                次へ
+              </Button>
+            </div>
+          )
+        }
+        onCancel={() => {
+          setPreviewImage(null);
+          setCurrentIndex(null);
+        }}
         width="90%"
         centered
         bodyStyle={{ padding: 0 }}
