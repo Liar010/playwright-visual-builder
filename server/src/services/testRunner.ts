@@ -1,4 +1,4 @@
-import { chromium, Browser, Page, BrowserContext, FrameLocator } from 'playwright';
+import { chromium, Browser, Page, BrowserContext, FrameLocator, Locator } from 'playwright';
 import { Socket } from 'socket.io';
 import { Node, Edge } from 'reactflow';
 import * as fs from 'fs/promises';
@@ -449,58 +449,41 @@ export class TestRunner {
 
         case 'click':
           const clickSelector = data.action?.selector || '';
-          const context = this.getContext();
           
-          if (this.currentFrame) {
-            // フレーム内での操作
-            this.recordExecutedCode(`await frame.locator('${clickSelector}').click();`);
-            await context.locator(clickSelector).waitFor({ state: 'visible', timeout: 10000 });
-            await context.locator(clickSelector).click();
-          } else {
-            // 通常のページでの操作
-            this.recordExecutedCode(`await page.click('${clickSelector}');`);
-            await this.page.waitForSelector(clickSelector, {
-              state: 'visible',
-              timeout: 10000,
-            });
-            await this.page.click(clickSelector);
-          }
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('click', clickSelector);
+          
+          // executeWithContextを使用してクリック
+          await this.executeWithContext(
+            clickSelector,
+            async (locator) => await locator.click()
+          );
           break;
 
         case 'doubleClick':
           const dblClickSelector = data.action?.selector || '';
-          const dblContext = this.getContext();
           
-          if (this.currentFrame) {
-            this.recordExecutedCode(`await frame.locator('${dblClickSelector}').dblclick();`);
-            await dblContext.locator(dblClickSelector).waitFor({ state: 'visible', timeout: 10000 });
-            await dblContext.locator(dblClickSelector).dblclick();
-          } else {
-            this.recordExecutedCode(`await page.dblclick('${dblClickSelector}');`);
-            await this.page.waitForSelector(dblClickSelector, {
-              state: 'visible',
-              timeout: 10000,
-            });
-            await this.page.dblclick(dblClickSelector);
-          }
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('dblclick', dblClickSelector);
+          
+          // executeWithContextを使用してダブルクリック
+          await this.executeWithContext(
+            dblClickSelector,
+            async (locator) => await locator.dblclick()
+          );
           break;
 
         case 'rightClick':
           const rightClickSelector = data.action?.selector || '';
-          const rightContext = this.getContext();
           
-          if (this.currentFrame) {
-            this.recordExecutedCode(`await frame.locator('${rightClickSelector}').click({ button: 'right' });`);
-            await rightContext.locator(rightClickSelector).waitFor({ state: 'visible', timeout: 10000 });
-            await rightContext.locator(rightClickSelector).click({ button: 'right' });
-          } else {
-            this.recordExecutedCode(`await page.click('${rightClickSelector}', { button: 'right' });`);
-            await this.page.waitForSelector(rightClickSelector, {
-              state: 'visible',
-              timeout: 10000,
-            });
-            await this.page.click(rightClickSelector, { button: 'right' });
-          }
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('rightclick', rightClickSelector);
+          
+          // executeWithContextを使用して右クリック
+          await this.executeWithContext(
+            rightClickSelector,
+            async (locator) => await locator.click({ button: 'right' })
+          );
           break;
 
         case 'hover':
@@ -524,20 +507,15 @@ export class TestRunner {
         case 'fill':
           const fillSelector = data.action?.selector || '';
           const fillValue = data.action?.value || '';
-          const fillContext = this.getContext();
           
-          if (this.currentFrame) {
-            this.recordExecutedCode(`await frame.locator('${fillSelector}').fill('${fillValue}');`);
-            await fillContext.locator(fillSelector).waitFor({ state: 'visible', timeout: 10000 });
-            await fillContext.locator(fillSelector).fill(fillValue);
-          } else {
-            this.recordExecutedCode(`await page.fill('${fillSelector}', '${fillValue}');`);
-            await this.page.waitForSelector(fillSelector, {
-              state: 'visible',
-              timeout: 10000,
-            });
-            await this.page.fill(fillSelector, fillValue);
-          }
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('fill', fillSelector, fillValue);
+          
+          // executeWithContextを使用してフォームに入力
+          await this.executeWithContext(
+            fillSelector,
+            async (locator) => await locator.fill(fillValue)
+          );
           break;
 
         case 'select':
@@ -584,13 +562,15 @@ export class TestRunner {
         case 'uploadFile':
           const fileSelector = data.action?.selector || '';
           const uploadFilePath = data.action?.filePath || '';
-          this.recordExecutedCode(`await page.waitForSelector('${fileSelector}', { state: 'visible', timeout: 10000 });`);
-          this.recordExecutedCode(`await page.setInputFiles('${fileSelector}', '${uploadFilePath}');`);
-          await this.page.waitForSelector(fileSelector, {
-            state: 'visible',
-            timeout: 10000,
-          });
-          await this.page.setInputFiles(fileSelector, uploadFilePath);
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('uploadFile', fileSelector, uploadFilePath);
+          
+          // executeWithContextを使用してファイルをアップロード
+          await this.executeWithContext(
+            fileSelector,
+            async (locator) => await locator.setInputFiles(uploadFilePath)
+          );
           console.log(`File uploaded: ${uploadFilePath}`);
           break;
 
@@ -747,13 +727,15 @@ export class TestRunner {
 
         case 'getText':
           const textSelector = data.action?.selector || '';
-          this.recordExecutedCode(`await page.waitForSelector('${textSelector}', { state: 'visible', timeout: 10000 });`);
-          this.recordExecutedCode(`const textContent = await page.locator('${textSelector}').textContent();`);
-          await this.page.waitForSelector(textSelector, {
-            state: 'visible',
-            timeout: 10000,
-          });
-          const textContent = await this.page.locator(textSelector).textContent();
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('getText', textSelector);
+          
+          // executeWithContextを使用してテキストを取得
+          const textContent = await this.executeWithContext(
+            textSelector,
+            async (locator) => await locator.textContent()
+          );
           
           // 変数名が指定されていれば保存、なければnode.idをキーとして保存
           const varName = data.action?.variableName || data.action?.variable || `text_${node.id}`;
@@ -786,13 +768,15 @@ export class TestRunner {
         case 'getAttribute':
           const attrSelector = data.action?.selector || '';
           const attrName = data.action?.attribute || '';
-          this.recordExecutedCode(`await page.waitForSelector('${attrSelector}', { state: 'visible', timeout: 10000 });`);
-          this.recordExecutedCode(`const attrValue = await page.locator('${attrSelector}').getAttribute('${attrName}');`);
-          await this.page.waitForSelector(attrSelector, {
-            state: 'visible',
-            timeout: 10000,
-          });
-          const attrValue = await this.page.locator(attrSelector).getAttribute(attrName);
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('getAttribute', attrSelector, attrName);
+          
+          // executeWithContextを使用して属性値を取得
+          const attrValue = await this.executeWithContext(
+            attrSelector,
+            async (locator) => await locator.getAttribute(attrName)
+          );
           
           // 変数名が指定されていれば保存、なければnode.idをキーとして保存
           const attrVarName = data.action?.variableName || data.action?.variable || `attr_${node.id}`;
@@ -825,11 +809,25 @@ export class TestRunner {
 
         case 'isEnabled':
           const enabledSelector = data.action?.selector || '';
-          await this.page.waitForSelector(enabledSelector, {
-            state: 'attached',
-            timeout: 10000,
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('isEnabled', enabledSelector);
+          
+          // executeWithContextを使用して確認
+          const isEnabled = await this.executeWithContext(
+            enabledSelector,
+            async (locator) => await locator.isEnabled(),
+            { state: 'attached' }
+          );
+          
+          // ログシステムに結果を送信
+          this.emitLog('info', `Element enabled check: ${enabledSelector} = ${isEnabled}`, {
+            nodeId: node.id,
+            selector: enabledSelector,
+            result: isEnabled,
+            type: 'isEnabled'
           });
-          const isEnabled = await this.page.locator(enabledSelector).isEnabled();
+          
           if (!isEnabled) {
             throw new Error(`Element is not enabled: ${enabledSelector}`);
           }
@@ -838,11 +836,25 @@ export class TestRunner {
 
         case 'isDisabled':
           const disabledSelector = data.action?.selector || '';
-          await this.page.waitForSelector(disabledSelector, {
-            state: 'attached',
-            timeout: 10000,
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('isDisabled', disabledSelector);
+          
+          // executeWithContextを使用して確認
+          const isDisabled = await this.executeWithContext(
+            disabledSelector,
+            async (locator) => await locator.isDisabled(),
+            { state: 'attached' }
+          );
+          
+          // ログシステムに結果を送信
+          this.emitLog('info', `Element disabled check: ${disabledSelector} = ${isDisabled}`, {
+            nodeId: node.id,
+            selector: disabledSelector,
+            result: isDisabled,
+            type: 'isDisabled'
           });
-          const isDisabled = await this.page.locator(disabledSelector).isDisabled();
+          
           if (!isDisabled) {
             throw new Error(`Element is not disabled: ${disabledSelector}`);
           }
@@ -851,11 +863,25 @@ export class TestRunner {
 
         case 'isChecked':
           const checkedSelector = data.action?.selector || '';
-          await this.page.waitForSelector(checkedSelector, {
-            state: 'attached',
-            timeout: 10000,
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('isChecked', checkedSelector);
+          
+          // executeWithContextを使用して確認
+          const isChecked = await this.executeWithContext(
+            checkedSelector,
+            async (locator) => await locator.isChecked(),
+            { state: 'attached' }
+          );
+          
+          // ログシステムに結果を送信
+          this.emitLog('info', `Element checked state: ${checkedSelector} = ${isChecked}`, {
+            nodeId: node.id,
+            selector: checkedSelector,
+            result: isChecked,
+            type: 'isChecked'
           });
-          const isChecked = await this.page.locator(checkedSelector).isChecked();
+          
           if (!isChecked) {
             throw new Error(`Element is not checked: ${checkedSelector}`);
           }
@@ -864,11 +890,25 @@ export class TestRunner {
 
         case 'isVisible':
           const visibleSelector = data.action?.selector || '';
-          await this.page.waitForSelector(visibleSelector, {
-            state: 'attached',
-            timeout: 10000,
+          
+          // 実行コードの記録（統一されたメソッドを使用）
+          this.recordActionCode('isVisible', visibleSelector);
+          
+          // executeWithContextを使用して確認
+          const isVisible = await this.executeWithContext(
+            visibleSelector,
+            async (locator) => await locator.isVisible(),
+            { state: 'attached' }
+          );
+          
+          // ログシステムに結果を送信
+          this.emitLog('info', `Element visibility check: ${visibleSelector} = ${isVisible}`, {
+            nodeId: node.id,
+            selector: visibleSelector,
+            result: isVisible,
+            type: 'isVisible'
           });
-          const isVisible = await this.page.locator(visibleSelector).isVisible();
+          
           if (!isVisible) {
             throw new Error(`Element is not visible: ${visibleSelector}`);
           }
@@ -1477,20 +1517,25 @@ export class TestRunner {
       throw new Error('Assertion selector is required');
     }
 
-    // セレクタが存在するまで待機
-    this.recordExecutedCode(`await page.waitForSelector('${selector}', { state: 'attached', timeout: 10000 });`);
-    await this.page.waitForSelector(selector, {
-      state: 'attached',
-      timeout: 10000,
-    });
+    // 実行コードの記録（iframe考慮）
+    if (this.currentFrame) {
+      this.recordExecutedCode(`await frame.locator('${selector}').waitFor({ state: 'attached', timeout: 10000 });`);
+    } else {
+      this.recordExecutedCode(`await page.waitForSelector('${selector}', { state: 'attached', timeout: 10000 });`);
+    }
 
-    const locator = this.page.locator(selector);
+    // getLocatorを使用してlocatorを取得（待機は各caseで必要に応じて行う）
+    const locator = this.getLocator(selector);
 
     switch (comparison) {
       case 'exists':
         // 要素が表示されているか確認
-        this.recordExecutedCode(`await expect(page.locator('${selector}')).toBeVisible();`);
-        const isVisible = await locator.isVisible();
+        this.recordExecutedCode(`await expect(${this.currentFrame ? 'frame' : 'page'}.locator('${selector}')).toBeVisible();`);
+        const isVisible = await this.executeWithContext(
+          selector,
+          async (loc) => await loc.isVisible(),
+          { state: 'attached' }
+        );
         if (!isVisible) {
           throw new Error(`Element is not visible: ${selector}`);
         }
@@ -1509,8 +1554,12 @@ export class TestRunner {
         break;
         
       case 'contains':
-        this.recordExecutedCode(`await expect(page.locator('${selector}')).toContainText('${expected}');`);
-        const contentText = await locator.textContent();
+        this.recordExecutedCode(`await expect(${this.currentFrame ? 'frame' : 'page'}.locator('${selector}')).toContainText('${expected}');`);
+        const contentText = await this.executeWithContext(
+          selector,
+          async (loc) => await loc.textContent(),
+          { state: 'visible' }
+        );
         if (!contentText?.includes(expected || '')) {
           throw new Error(`Text "${expected}" not found in element: ${selector}`);
         }
@@ -1978,6 +2027,133 @@ export class TestRunner {
       throw new Error('Page is not initialized');
     }
     return this.currentFrame || this.page;
+  }
+
+  /**
+   * セレクタに対してアクションを実行する共通メソッド
+   * iframe内外の違いを吸収し、待機処理も統一的に行う
+   */
+  private async executeWithContext<T>(
+    selector: string,
+    action: (locator: Locator) => Promise<T>,
+    options?: {
+      timeout?: number;
+      state?: 'visible' | 'attached' | 'hidden' | 'detached';
+      waitAfter?: number;
+    }
+  ): Promise<T> {
+    if (!this.page) {
+      throw new Error('Page is not initialized');
+    }
+    
+    const timeout = options?.timeout || 10000;
+    const state = options?.state || 'visible';
+    
+    if (this.currentFrame) {
+      // iframe内の場合
+      const locator = this.currentFrame.locator(selector);
+      await locator.waitFor({ state, timeout });
+      const result = await action(locator);
+      if (options?.waitAfter) {
+        await this.page.waitForTimeout(options.waitAfter);
+      }
+      return result;
+    } else {
+      // 通常ページの場合
+      await this.page.waitForSelector(selector, { state, timeout });
+      const locator = this.page.locator(selector);
+      const result = await action(locator);
+      if (options?.waitAfter) {
+        await this.page.waitForTimeout(options.waitAfter);
+      }
+      return result;
+    }
+  }
+
+  /**
+   * アクションの実行コードを記録する共通メソッド
+   * iframe内外の違いを考慮して適切なコードを記録
+   */
+  private recordActionCode(
+    action: string,
+    selector?: string,
+    value?: string | number,
+    options?: Record<string, any>
+  ) {
+    const context = this.currentFrame ? 'frame' : 'page';
+    const selectorStr = selector ? `'${selector}'` : '';
+    
+    switch (action) {
+      case 'click':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).click();`);
+        break;
+      case 'dblclick':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).dblclick();`);
+        break;
+      case 'rightclick':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).click({ button: 'right' });`);
+        break;
+      case 'fill':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).fill('${value}');`);
+        break;
+      case 'select':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).selectOption('${value}');`);
+        break;
+      case 'check':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).check();`);
+        break;
+      case 'hover':
+        this.recordExecutedCode(`await ${context}.locator(${selectorStr}).hover();`);
+        break;
+      case 'getText':
+        this.recordExecutedCode(`const textContent = await ${context}.locator(${selectorStr}).textContent();`);
+        break;
+      case 'getAttribute':
+        this.recordExecutedCode(`const attrValue = await ${context}.locator(${selectorStr}).getAttribute('${value}');`);
+        break;
+      case 'isEnabled':
+        this.recordExecutedCode(`const isEnabled = await ${context}.locator(${selectorStr}).isEnabled();`);
+        break;
+      case 'isDisabled':
+        this.recordExecutedCode(`const isDisabled = await ${context}.locator(${selectorStr}).isDisabled();`);
+        break;
+      case 'isChecked':
+        this.recordExecutedCode(`const isChecked = await ${context}.locator(${selectorStr}).isChecked();`);
+        break;
+      case 'isVisible':
+        this.recordExecutedCode(`const isVisible = await ${context}.locator(${selectorStr}).isVisible();`);
+        break;
+      case 'uploadFile':
+        this.recordExecutedCode(`await ${context}.setInputFiles(${selectorStr}, '${value}');`);
+        break;
+      case 'waitForSelector':
+        const state = options?.state || 'visible';
+        const timeout = options?.timeout || 10000;
+        if (context === 'frame') {
+          this.recordExecutedCode(`await ${context}.locator(${selectorStr}).waitFor({ state: '${state}', timeout: ${timeout} });`);
+        } else {
+          this.recordExecutedCode(`await ${context}.waitForSelector(${selectorStr}, { state: '${state}', timeout: ${timeout} });`);
+        }
+        break;
+      default:
+        // カスタムコードの場合はそのまま記録
+        if (action.startsWith('await') || action.startsWith('const')) {
+          this.recordExecutedCode(action);
+        }
+    }
+  }
+
+  /**
+   * セレクタのロケーターを取得する（待機なし）
+   */
+  private getLocator(selector: string): Locator {
+    if (!this.page) {
+      throw new Error('Page is not initialized');
+    }
+    if (this.currentFrame) {
+      return this.currentFrame.locator(selector);
+    }
+    return this.page.locator(selector);
   }
 
   private emitLog(level: 'info' | 'warn' | 'error' | 'debug', message: string, data?: any) {
